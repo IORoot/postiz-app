@@ -20,3 +20,6 @@ export * from './generate.video.workflow';
 export * from './process.media.workflow';
 export * from './render.video.edit.workflow';
 export * from './clipping.workflow';
+export * from './pipeline-workflows/pipeline.scheduler.workflow.v1';
+export * from './pipeline-workflows/pipeline.slot.workflow.v1';
+export * from './pipeline-workflows/pipeline.post.workflow.v1';

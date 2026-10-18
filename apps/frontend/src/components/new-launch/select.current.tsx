@@ -59,6 +59,7 @@ export const SelectCurrent: FC = () => {
     current,
     setCurrent,
     locked,
+    pipelineId,
     setHide,
     addOrRemoveSelectedIntegration,
   } = useLaunchStore(
@@ -68,9 +69,11 @@ export const SelectCurrent: FC = () => {
       current: state.current,
       setCurrent: state.setCurrent,
       locked: state.locked,
+      pipelineId: state.pipelineId,
       setHide: state.setHide,
     }))
   );
+  const channelsLocked = locked || !!pipelineId;
 
   const contentRef = useRef<HTMLDivElement>(null);
   const hasScroll = useHasScroll(contentRef);
@@ -101,7 +104,7 @@ export const SelectCurrent: FC = () => {
           ref={contentRef}
           className={clsx(
             'flex gap-[6px] mobile:gap-[4px] w-full overflow-x-auto scrollbar scrollbar-thumb-tableBorder scrollbar-track-secondary mobile:scrollbar-none',
-            locked && 'opacity-50 pointer-events-none'
+            channelsLocked && 'opacity-50 pointer-events-none'
           )}
         >
           {/* an existing post opens on its channels, without the global mode */}

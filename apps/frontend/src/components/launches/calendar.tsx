@@ -907,6 +907,23 @@ export const CalendarColumn: FC<{
 
       // Find the post to check its state
       const post = posts.find((p) => p.id === item.id);
+      if ((post as { pipelineItemId?: string } | undefined)?.pipelineItemId) {
+        const { status } = await fetch(
+          `/pipelines/items/${
+            (post as { pipelineItemId?: string }).pipelineItemId
+          }/schedule`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              date: getDate.utc().format('YYYY-MM-DDTHH:mm:ss'),
+            }),
+          }
+        );
+        if (status !== 500) {
+          reloadCalendarView();
+        }
+        return;
+      }
       let action: 'schedule' | 'update' = 'schedule';
 
       // Check if post is already published or queued in the past

@@ -66,6 +66,7 @@ export const PicksSocialsComponent: FC<{
 
   const {
     locked,
+    pipelineId,
     addOrRemoveSelectedIntegration,
     integrations,
     selectedIntegrations,
@@ -75,8 +76,10 @@ export const PicksSocialsComponent: FC<{
       selectedIntegrations: state.selectedIntegrations,
       addOrRemoveSelectedIntegration: state.addOrRemoveSelectedIntegration,
       locked: state.locked,
+      pipelineId: state.pipelineId,
     }))
   );
+  const channelsLocked = locked || !!pipelineId;
 
   const availableIntegrations = integrations.filter((f) => {
     if (exising.integration) {
@@ -100,7 +103,7 @@ export const PicksSocialsComponent: FC<{
       <div
         className={clsx(
           'flex flex-col gap-[4px]',
-          locked && 'opacity-50 pointer-events-none'
+          channelsLocked && 'opacity-50 pointer-events-none'
         )}
       >
         {availableIntegrations.map((integration) => (
@@ -118,7 +121,7 @@ export const PicksSocialsComponent: FC<{
   }
 
   return (
-    <div className={clsx('flex', locked && 'opacity-50 pointer-events-none')}>
+    <div className={clsx('flex', channelsLocked && 'opacity-50 pointer-events-none')}>
       <div className="flex flex-1">
         <div className="innerComponent flex-1 flex">
           <div className="flex flex-wrap gap-[12px] flex-1">
