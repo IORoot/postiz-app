@@ -14,6 +14,14 @@ COPY libraries/nestjs-libraries/src/dtos/posts/bulk.posts.dto.ts \
      /app/libraries/nestjs-libraries/src/dtos/posts/bulk.posts.dto.ts
 COPY libraries/nestjs-libraries/src/dtos/media/bulk.delete.media.dto.ts \
      /app/libraries/nestjs-libraries/src/dtos/media/bulk.delete.media.dto.ts
+COPY libraries/nestjs-libraries/src/dtos/media/create.media.folder.dto.ts \
+     /app/libraries/nestjs-libraries/src/dtos/media/create.media.folder.dto.ts
+COPY libraries/nestjs-libraries/src/dtos/media/move.media.dto.ts \
+     /app/libraries/nestjs-libraries/src/dtos/media/move.media.dto.ts
+COPY libraries/nestjs-libraries/src/dtos/media/rename.media.folder.dto.ts \
+     /app/libraries/nestjs-libraries/src/dtos/media/rename.media.folder.dto.ts
+COPY libraries/nestjs-libraries/src/database/prisma/schema.prisma \
+     /app/libraries/nestjs-libraries/src/database/prisma/schema.prisma
 COPY libraries/nestjs-libraries/src/database/prisma/media/media.repository.ts \
      /app/libraries/nestjs-libraries/src/database/prisma/media/media.repository.ts
 COPY libraries/nestjs-libraries/src/database/prisma/media/media.service.ts \
@@ -46,6 +54,8 @@ COPY apps/frontend/src/components/launches/filters.tsx \
      /app/apps/frontend/src/components/launches/filters.tsx
 COPY apps/frontend/src/components/media/media.component.tsx \
      /app/apps/frontend/src/components/media/media.component.tsx
+COPY apps/frontend/src/components/media/media.folders.tsx \
+     /app/apps/frontend/src/components/media/media.folders.tsx
 COPY apps/frontend/src/components/media/media.bulk.actions.tsx \
      /app/apps/frontend/src/components/media/media.bulk.actions.tsx
 COPY apps/frontend/src/components/media/editor \
@@ -100,7 +110,9 @@ COPY apps/frontend/public/icons/platforms/buffer.png \
      /app/apps/frontend/public/icons/platforms/buffer.png
 
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN pnpm run build:orchestrator && pnpm run build:backend && pnpm run build:frontend
+# The folder model is new, so the client in the official image does not know it yet.
+RUN DATABASE_URL="postgresql://postiz:postiz@localhost:5432/postiz" pnpm run prisma-generate \
+    && pnpm run build:orchestrator && pnpm run build:backend && pnpm run build:frontend
 
 FROM ghcr.io/gitroomhq/postiz-app:latest
 LABEL org.opencontainers.image.source="https://github.com/IORoot/postiz-app"
@@ -113,6 +125,8 @@ COPY --from=build /app/apps/backend/dist /app/apps/backend/dist
 COPY --from=build /app/apps/frontend/.next /app/apps/frontend/.next
 COPY --from=build /app/apps/frontend/src /app/apps/frontend/src
 COPY --from=build /app/libraries/nestjs-libraries/src /app/libraries/nestjs-libraries/src
+COPY --from=build /app/node_modules/.prisma /app/node_modules/.prisma
+COPY --from=build /app/node_modules/@prisma/client /app/node_modules/@prisma/client
 COPY --from=build /app/libraries/react-shared-libraries/src /app/libraries/react-shared-libraries/src
 COPY --from=build /app/apps/backend/src /app/apps/backend/src
 COPY --from=build /app/apps/frontend/public/icons/platforms/webhook.png \

@@ -56,6 +56,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { useDebounce } from 'use-debounce';
 import { MediaBulkActionsBar } from '@gitroom/frontend/components/media/media.bulk.actions';
+import { MediaFoldersSidebar } from '@gitroom/frontend/components/media/media.folders';
 const MediaEditor = dynamic(
   () => import('@gitroom/frontend/components/media/editor/media.editor')
 );
@@ -162,7 +163,7 @@ export const Pagination: FC<{
                 'cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border hover:bg-forth h-10 w-10 hover:text-white border-newBorder',
                 current === item - 1
                   ? 'bg-forth !text-white'
-                  : 'text-textColor hover:text-white'
+                  : 'text-textColor hover:text-white',
               )}
             >
               {item}
@@ -175,7 +176,7 @@ export const Pagination: FC<{
       </li>
       <li
         className={clsx(
-          current + 1 === totalPages && 'opacity-20 pointer-events-none'
+          current + 1 === totalPages && 'opacity-20 pointer-events-none',
         )}
       >
         <a
@@ -188,6 +189,36 @@ export const Pagination: FC<{
         </a>
       </li>
     </ul>
+  );
+};
+const MoveToFolderControl: FC<{
+  media: any;
+  moveToFolder: (folderId: string) => void;
+}> = ({ media, moveToFolder }) => {
+  const fetch = useFetch();
+  const t = useT();
+  const loadFolders = useCallback(async () => {
+    return (await fetch('/media/folders')).json();
+  }, []);
+  const { data: folders } = useSWR('get-media-folders', loadFolders);
+  if (!folders?.length) return null;
+  return (
+    <select
+      value={media.folderId || ''}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        e.stopPropagation();
+        moveToFolder(e.target.value);
+      }}
+      className="absolute top-[32px] start-[5px] z-[100] hidden group-hover:block text-[10px] bg-black/60 text-white rounded-[4px] outline-none max-w-[80px]"
+    >
+      <option value="">{t('no_folder', 'No folder')}</option>
+      {folders.map((folder: any) => (
+        <option key={folder.id} value={folder.id}>
+          {folder.name}
+        </option>
+      ))}
+    </select>
   );
 };
 export const ShowMediaBoxModal: FC = () => {
@@ -217,7 +248,7 @@ export const ShowMediaBoxModal: FC = () => {
   return null;
 };
 export const showMediaBox = (
-  callback: (params: { id: string; path: string }) => void
+  callback: (params: { id: string; path: string }) => void,
 ) => {
   showModalEmitter.emit('show-modal', callback);
 };
@@ -232,6 +263,7 @@ export const MediaBox: FC<{
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 300);
+  const [selectedFolder, setSelectedFolder] = useState<string | undefined>();
   const fetch = useFetch();
   const modals = useModals();
   const toaster = useToaster();
@@ -241,21 +273,34 @@ export const MediaBox: FC<{
       setSelected([]);
       setWholeLibrary(false);
     }
-  }, [debouncedSearch]);
+  }, [debouncedSearch, selectedFolder]);
   const loadMedia = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page + 1) });
     if (debouncedSearch.trim()) {
       params.set('search', debouncedSearch.trim());
     }
+    if (selectedFolder) {
+      params.set('folderId', selectedFolder);
+    }
     return (await fetch(`/media?${params.toString()}`)).json();
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, selectedFolder]);
   const { data, mutate, isLoading } = useSWR(
-    `get-media-${page}-${debouncedSearch}`,
+    `get-media-${page}-${debouncedSearch}-${selectedFolder || ''}`,
     loadMedia,
     {
       refreshInterval: (latest: { results?: { status?: string }[] }) =>
         latest?.results?.some((item) => item.status === 'rendering') ? 3000 : 0,
     }
+  );
+  const moveToFolder = useCallback(
+    (media: { id: string }) => async (folderId: string) => {
+      await fetch('/media/move', {
+        method: 'POST',
+        body: JSON.stringify({ id: media.id, folderId: folderId || undefined }),
+      });
+      mutate();
+    },
+    [mutate]
   );
   const [selected, setSelected] = useState<any[]>([]);
   // the standalone library selects only to delete in bulk
@@ -271,8 +316,8 @@ export const MediaBox: FC<{
       type == 'image'
         ? 'image/*'
         : type == 'video'
-        ? 'video/mp4'
-        : 'image/*,video/mp4',
+          ? 'video/mp4'
+          : 'image/*,video/mp4',
     onUploadSuccess: async (arr) => {
       await mutate();
       if (standalone) {
@@ -381,9 +426,9 @@ export const MediaBox: FC<{
         toaster.show(
           t(
             'upload_size_limit_exceeded',
-            'Upload size limit exceeded. Maximum 1 GB per upload session.'
+            'Upload size limit exceeded. Maximum 1 GB per upload session.',
           ),
-          'warning'
+          'warning',
         );
         return;
       }
@@ -393,7 +438,7 @@ export const MediaBox: FC<{
       // @ts-ignore
       uppy.addFiles(files);
     },
-    [toaster, t]
+    [toaster, t],
   );
 
   const dragAndDrop = useCallback(
@@ -424,9 +469,9 @@ export const MediaBox: FC<{
         toaster.show(
           t(
             'upload_size_limit_exceeded',
-            'Upload size limit exceeded. Maximum 1 GB per upload session.'
+            'Upload size limit exceeded. Maximum 1 GB per upload session.',
           ),
-          'warning'
+          'warning',
         );
         return;
       }
@@ -437,7 +482,7 @@ export const MediaBox: FC<{
         uppy.addFile(file);
       }
     },
-    [toaster, t]
+    [toaster, t],
   );
 
   const maximize = useCallback(
@@ -466,7 +511,7 @@ export const MediaBox: FC<{
         ),
       });
     },
-    []
+    [],
   );
 
   const editImage = useCallback(
@@ -542,8 +587,8 @@ export const MediaBox: FC<{
         !(await deleteDialog(
           t(
             'are_you_sure_you_want_to_delete_the_image',
-            'Are you sure you want to delete the image?'
-          )
+            'Are you sure you want to delete the image?',
+          ),
         ))
       ) {
         return;
@@ -553,7 +598,7 @@ export const MediaBox: FC<{
       });
       mutate();
     },
-    [mutate]
+    [mutate],
   );
 
   // phones have no hover, so the selected media are deleted together
@@ -601,13 +646,23 @@ export const MediaBox: FC<{
         ) : (
           <PlusIcon size={14} />
         )}
-        <div className={loading ? 'invisible' : undefined}>{t('upload', 'Upload')}</div>
+        <div className={loading ? 'invisible' : undefined}>
+          {t('upload', 'Upload')}
+        </div>
       </button>
     );
   }, [t, loading]);
 
   return (
-    <DropFiles disabled={loading} className="flex flex-col flex-1" onDrop={dragAndDrop}>
+    <DropFiles
+      disabled={loading}
+      className="flex flex-row mobile:flex-col flex-1"
+      onDrop={dragAndDrop}
+    >
+      <MediaFoldersSidebar
+        selectedFolder={selectedFolder}
+        setSelectedFolder={setSelectedFolder}
+      />
       <div className="flex flex-col flex-1">
         <div
           className={clsx(
@@ -615,7 +670,7 @@ export const MediaBox: FC<{
             !isLoading &&
               !data?.results?.length &&
               !debouncedSearch &&
-              'hidden'
+              'hidden',
           )}
         >
           <div className="flex-1 mobile:basis-full">
@@ -676,6 +731,7 @@ export const MediaBox: FC<{
                 ids: selected.map((p: any) => p.id),
                 all: wholeLibrary,
                 search: debouncedSearch,
+                folderId: selectedFolder,
               }}
               pageSelected={pageSelected}
               onSelectPage={selectPage}
@@ -713,7 +769,7 @@ export const MediaBox: FC<{
             'flex-1 relative',
             !isLoading &&
               !data?.results?.length &&
-              'bg-newTextColor/[0.02] rounded-[12px]'
+              'bg-newTextColor/[0.02] rounded-[12px]',
           )}
         >
           <div
@@ -721,7 +777,7 @@ export const MediaBox: FC<{
               'absolute -left-[3px] -top-[3px] withp3 h-full overflow-x-hidden overflow-y-auto scrollbar scrollbar-thumb-newColColor scrollbar-track-newBgColorInner mobile:-left-[6px] mobile:-top-[6px] mobile:!w-[calc(100%+12px)] mobile:!h-[calc(100%+12px)]',
               !isLoading &&
                 !data?.results?.length &&
-                'flex justify-center items-center gap-[20px] flex-col'
+                'flex justify-center items-center gap-[20px] flex-col',
             )}
           >
             {!isLoading && !data?.results?.length && (
@@ -729,24 +785,21 @@ export const MediaBox: FC<{
                 <NoMediaIcon />
                 <div className="text-[20px] font-[600]">
                   {debouncedSearch
-                    ? t(
-                        'no_media_match_search',
-                        'No media matches your search'
-                      )
+                    ? t('no_media_match_search', 'No media matches your search')
                     : t(
                         'you_dont_have_any_media_yet',
-                        "You don't have any media yet"
+                        "You don't have any media yet",
                       )}
                 </div>
                 <div className="whitespace-pre-line text-newTextColor/[0.6] text-center">
                   {t(
                     'select_or_upload_pictures_max_1gb',
-                    'Select or upload pictures (maximum 1 GB per upload).'
+                    'Select or upload pictures (maximum 1 GB per upload).',
                   )}{' '}
                   {'\n'}
                   {t(
                     'you_can_drag_drop_pictures',
-                    'You can also drag & drop pictures.'
+                    'You can also drag & drop pictures.',
                   )}
                 </div>
                 <div className="forceChange flex gap-[8px] mobile:w-full mobile:max-w-[300px] mobile:child:flex-1">
@@ -796,7 +849,7 @@ export const MediaBox: FC<{
                       (standalone && wholeLibrary) ||
                         !!selected.find((p) => p.id === media.id)
                         ? 'border-[#612BD3]'
-                        : 'border-transparent'
+                        : 'border-transparent',
                     )}
                     onClick={addRemoveSelected(media)}
                   >
@@ -848,6 +901,12 @@ export const MediaBox: FC<{
                     >
                       {media.originalName}
                     </div>
+                    {!selectMode && (
+                      <MoveToFolderControl
+                        media={media}
+                        moveToFolder={moveToFolder(media)}
+                      />
+                    )}
                     <div className="w-full h-full rounded-[6px] overflow-hidden relative">
                       <div className="absolute z-[20] left-[50%] top-[50%] -translate-x-[50%] -translate-y-[50%]">
                         <div
@@ -1019,7 +1078,7 @@ export const MultiMediaComponent: FC<{
         | {
             path: string;
             id: string;
-          }[]
+          }[],
     ) => {
       const mediaArray = Array.isArray(m) ? m : [m];
       if (insertInContent) {
@@ -1067,7 +1126,7 @@ export const MultiMediaComponent: FC<{
         },
       });
     },
-    [currentMedia]
+    [currentMedia],
   );
 
   const designMedia = useCallback(() => {

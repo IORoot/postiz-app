@@ -17,6 +17,7 @@ export interface BulkMediaSelection {
   ids: string[];
   all: boolean;
   search: string;
+  folderId?: string;
 }
 
 export const useBulkMediaActions = (
@@ -36,9 +37,10 @@ export const useBulkMediaActions = (
           method: 'POST',
           body: JSON.stringify(
             selection.all
-              ? {
+                ? {
                   all: true,
                   search: selection.search.trim() || undefined,
+                  folderId: selection.folderId,
                   removeFiles,
                 }
               : { ids: selection.ids, removeFiles }
@@ -84,9 +86,16 @@ export const useBulkMediaActions = (
 
   const tooMany = !selection.all && selection.ids.length > BULK_MEDIA_MAX;
   const target = selection.all
-    ? selection.search.trim()
-      ? t('all_media_matching_search', 'all media matching your search')
-      : t('all_media_in_library', 'all media in the library')
+    ? selection.folderId
+      ? selection.search.trim()
+        ? t(
+            'all_media_in_folder_matching_search',
+            'all media in this folder matching your search'
+          )
+        : t('all_media_in_folder', 'all media in this folder')
+      : selection.search.trim()
+        ? t('all_media_matching_search', 'all media matching your search')
+        : t('all_media_in_library', 'all media in the library')
     : t('n_media', '{{n}} media', { n: selection.ids.length });
 
   const hide = useCallback(async () => {
@@ -159,12 +168,18 @@ export const MediaBulkActionsBar: FC<{
       <Checkbox
         disableForm
         checked={selection.all}
-        label={t('select_whole_library', 'Select whole library')}
+        label={
+          selection.folderId
+            ? t('select_whole_folder', 'Select whole folder')
+            : t('select_whole_library', 'Select whole library')
+        }
         onChange={selection.all ? onClear : onSelectLibrary}
       />
       <div className="text-textColor/70">
         {selection.all
-          ? t('whole_library_selected', 'Whole library')
+          ? selection.folderId
+            ? t('whole_folder_selected', 'Whole folder')
+            : t('whole_library_selected', 'Whole library')
           : t('n_selected', 'Selected: {{n}}', { n: selection.ids.length })}
       </div>
       {tooMany && (
