@@ -10,6 +10,7 @@ import {
   Req,
   Res,
   UploadedFile,
+  UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
@@ -18,13 +19,15 @@ import { Organization } from '@prisma/client';
 import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/media.service';
 import { ApiTags } from '@nestjs/swagger';
 import handleR2Upload from '@gitroom/nestjs-libraries/upload/r2.uploader';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { streamUploadOptions } from '@gitroom/nestjs-libraries/upload/multer.stream.engine';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { SaveMediaInformationDto } from '@gitroom/nestjs-libraries/dtos/media/save.media.information.dto';
+import { BulkDeleteMediaDto } from '@gitroom/nestjs-libraries/dtos/media/bulk.delete.media.dto';
 import { VideoDto } from '@gitroom/nestjs-libraries/dtos/videos/video.dto';
 import { VideoFunctionDto } from '@gitroom/nestjs-libraries/dtos/videos/video.function.dto';
+import { VIDEO_EDIT_MAX_OVERLAYS } from '@gitroom/nestjs-libraries/videos/video.edit';
 
 @ApiTags('Media')
 @Controller('/media')
@@ -38,6 +41,14 @@ export class MediaController {
   @Delete('/:id')
   deleteMedia(@GetOrgFromRequest() org: Organization, @Param('id') id: string) {
     return this._mediaService.deleteMedia(org.id, id);
+  }
+
+  @Post('/bulk/delete')
+  bulkDeleteMedia(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: BulkDeleteMediaDto
+  ) {
+    return this._mediaService.bulkDeleteMedia(org.id, body);
   }
 
   @Post('/generate-video')
@@ -127,6 +138,22 @@ export class MediaController {
     return this._mediaService.saveMediaInformation(org.id, body);
   }
 
+  @Post('/video-edit')
+  @UseInterceptors(
+    FilesInterceptor('overlays', VIDEO_EDIT_MAX_OVERLAYS, streamUploadOptions())
+  )
+  startVideoEdit(
+    @GetOrgFromRequest() org: Organization,
+    @Body('edit') edit: string,
+    @UploadedFiles() files: Express.Multer.File[] = []
+  ) {
+    return this._mediaService.startVideoEdit(
+      org.id,
+      edit,
+      files.map((file) => ({ path: file.path, mimetype: file.mimetype }))
+    );
+  }
+
   @Post('/upload-simple')
   @UseInterceptors(FileInterceptor('file', streamUploadOptions()))
   async uploadSimple(
@@ -176,6 +203,14 @@ export class MediaController {
     );
 
     res.status(200).json({ ...upload, saved: saveFile });
+  }
+
+  @Get('/:id/probe')
+  probeMedia(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._mediaService.probeMedia(org.id, id);
   }
 
   @Get('/:id/status')

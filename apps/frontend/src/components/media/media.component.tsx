@@ -49,14 +49,25 @@ import {
   VerticalDividerIcon,
   NoMediaIcon,
   TrashIcon,
+  PencilIcon,
 } from '@gitroom/frontend/components/ui/icons';
 import { useLaunchStore } from '@gitroom/frontend/components/new-launch/store';
 import { useShallow } from 'zustand/react/shallow';
 import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
 import { useDebounce } from 'use-debounce';
-const Polonto = dynamic(
-  () => import('@gitroom/frontend/components/launches/polonto')
+import { MediaBulkActionsBar } from '@gitroom/frontend/components/media/media.bulk.actions';
+const MediaEditor = dynamic(
+  () => import('@gitroom/frontend/components/media/editor/media.editor')
 );
+const MediaVideoEditor = dynamic(
+  () => import('@gitroom/frontend/components/media/editor/media.video.editor')
+);
+const isVideoFile = (path?: string | null) =>
+  hasExtension(path, 'mp4') || hasExtension(path, 'mov');
+const isAudioFile = (path?: string | null) =>
+  hasExtension(path, 'mp3') ||
+  hasExtension(path, 'm4a') ||
+  hasExtension(path, 'wav');
 const showModalEmitter = new EventEmitter();
 // on phones the media library takes the whole screen
 export const mediaLibrarySize = () =>
@@ -215,7 +226,7 @@ const MAX_UPLOAD_SIZE = 1024 * 1024 * 1024; // 1 GB
 export const MediaBox: FC<{
   setMedia: (params: { id: string; path: string }[]) => void;
   standalone?: boolean;
-  type?: 'image' | 'video';
+  type?: 'image' | 'video' | 'audio';
   closeModal: () => void;
 }> = ({ type, standalone, setMedia }) => {
   const [page, setPage] = useState(0);
@@ -226,6 +237,10 @@ export const MediaBox: FC<{
   const toaster = useToaster();
   useEffect(() => {
     setPage(0);
+    if (standalone) {
+      setSelected([]);
+      setWholeLibrary(false);
+    }
   }, [debouncedSearch]);
   const loadMedia = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page + 1) });
@@ -236,9 +251,16 @@ export const MediaBox: FC<{
   }, [page, debouncedSearch]);
   const { data, mutate, isLoading } = useSWR(
     `get-media-${page}-${debouncedSearch}`,
-    loadMedia
+    loadMedia,
+    {
+      refreshInterval: (latest: { results?: { status?: string }[] }) =>
+        latest?.results?.some((item) => item.status === 'rendering') ? 3000 : 0,
+    }
   );
-  const [selected, setSelected] = useState([]);
+  const [selected, setSelected] = useState<any[]>([]);
+  // the standalone library selects only to delete in bulk
+  const [selectMode, setSelectMode] = useState(false);
+  const [wholeLibrary, setWholeLibrary] = useState(false);
   const t = useT();
   const uploaderRef = useRef<any>(null);
   const mediaDirectory = useMediaDirectory();
@@ -279,7 +301,12 @@ export const MediaBox: FC<{
 
   const addRemoveSelected = useCallback(
     (media: any) => () => {
-      if (standalone) {
+      if (standalone && !selectMode) {
+        return;
+      }
+      if (wholeLibrary) {
+        setWholeLibrary(false);
+        setSelected([media]);
         return;
       }
       const exists = selected.find((p: any) => p.id === media.id);
@@ -289,8 +316,52 @@ export const MediaBox: FC<{
       }
       setSelected([...selected, media]);
     },
-    [selected]
+    [selected, standalone, selectMode, wholeLibrary]
   );
+
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode(!selectMode);
+    setSelected([]);
+    setWholeLibrary(false);
+  }, [selectMode]);
+
+  const pageMedia = useMemo(() => data?.results || [], [data?.results]);
+  const pageSelected =
+    wholeLibrary ||
+    (!!pageMedia.length &&
+      pageMedia.every((m: any) => selected.some((p: any) => p.id === m.id)));
+
+  const selectPage = useCallback(() => {
+    setWholeLibrary(false);
+    setSelected((current: any) => [
+      ...current,
+      ...pageMedia.filter(
+        (m: any) => !current.some((p: any) => p.id === m.id)
+      ),
+    ]);
+  }, [pageMedia]);
+
+  const selectLibrary = useCallback(() => {
+    setSelected([]);
+    setWholeLibrary(true);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelected([]);
+    setWholeLibrary(false);
+  }, []);
+
+  const bulkDone = useCallback(async () => {
+    const all = wholeLibrary;
+    clearSelection();
+    const result = await mutate();
+    // deleting a whole last page leaves nothing to show there
+    if (all) {
+      setPage(0);
+    } else if (page >= (result?.pages || 1)) {
+      setPage(Math.max(0, (result?.pages || 1) - 1));
+    }
+  }, [wholeLibrary, clearSelection, mutate, page]);
 
   const addMedia = useCallback(async () => {
     if (standalone) {
@@ -377,7 +448,7 @@ export const MediaBox: FC<{
         top: 10,
         children: (
           <div className="w-full h-full p-[50px]">
-            {hasExtension(media.path, 'mp4') ? (
+            {isVideoFile(media.path) ? (
               <VideoFrame
                 autoplay={true}
                 url={mediaDirectory.set(media.path)}
@@ -396,6 +467,72 @@ export const MediaBox: FC<{
       });
     },
     []
+  );
+
+  const editImage = useCallback(
+    (media: Media) => (e: any) => {
+      e.stopPropagation();
+      modals.openModal({
+        title: t('media_editor', 'Media Editor'),
+        askClose: true,
+        closeOnEscape: true,
+        fullScreen: true,
+        size: 'calc(100% - 80px)',
+        height: 'calc(100% - 80px)',
+        children: (close) => (
+          <MediaEditor
+            media={{
+              path: mediaDirectory.set(media.path),
+              name: media.originalName || media.name,
+            }}
+            setMedia={() => {
+              toaster.show(
+                t('editor_saved_copy', 'Saved a copy to the library'),
+                'success'
+              );
+              mutate();
+            }}
+            closeModal={close}
+          />
+        ),
+      });
+    },
+    [mutate, t]
+  );
+
+  const editVideo = useCallback(
+    (media: Media) => (e: any) => {
+      e.stopPropagation();
+      modals.openModal({
+        title: t('video_editor', 'Video Editor'),
+        askClose: true,
+        closeOnEscape: true,
+        fullScreen: true,
+        size: 'calc(100% - 80px)',
+        height: 'calc(100% - 80px)',
+        children: (close) => (
+          <MediaVideoEditor
+            media={{
+              id: media.id,
+              path: media.path,
+              name: media.originalName || media.name,
+            }}
+            onSaved={() => {
+              toaster.show(
+                t(
+                  'editor_video_rendering',
+                  'Saving the video. It will show up in the library when it is ready.'
+                ),
+                'success'
+              );
+              mutate();
+            }}
+            closeModal={close}
+          />
+        ),
+      });
+    },
+    [mutate, t]
   );
 
   const deleteImage = useCallback(
@@ -500,6 +637,19 @@ export const MediaBox: FC<{
           <div className={clsx('flex gap-[8px]', !standalone && 'mobile:hidden')}>
             {btn}
             <ThirdPartyMediaLibrary onImported={() => mutate()} />
+            {standalone && !!data?.results?.length && (
+              <button
+                onClick={toggleSelectMode}
+                className={clsx(
+                  'cursor-pointer flex h-[44px] px-[18px] justify-center items-center rounded-[8px] select-none',
+                  selectMode
+                    ? 'bg-boxFocused text-textItemFocused'
+                    : 'bg-btnSimple changeColor'
+                )}
+              >
+                {t('select', 'Select')}
+              </button>
+            )}
           </div>
           {!standalone && !!data?.results?.length && (
             <div className="hidden mobile:block basis-full text-[14px] font-[600]">
@@ -509,7 +659,7 @@ export const MediaBox: FC<{
               )}
             </div>
           )}
-          {!!selected.length && (
+          {!standalone && !!selected.length && (
             <div
               onClick={deleteSelected}
               className="hidden mobile:flex basis-full justify-center items-center gap-[8px] h-[24px] text-[15px] font-[600] text-[#FF3F3F] cursor-pointer select-none"
@@ -519,6 +669,23 @@ export const MediaBox: FC<{
             </div>
           )}
         </div>
+        {standalone && selectMode && (
+          <div className="mt-[12px]">
+            <MediaBulkActionsBar
+              selection={{
+                ids: selected.map((p: any) => p.id),
+                all: wholeLibrary,
+                search: debouncedSearch,
+              }}
+              pageSelected={pageSelected}
+              onSelectPage={selectPage}
+              onSelectLibrary={selectLibrary}
+              onClear={clearSelection}
+              onCancel={toggleSelectMode}
+              onDone={bulkDone}
+            />
+          </div>
+        )}
         <div
           className={clsx(
             'w-full pointer-events-none relative mt-[5px] mb-[5px]',
@@ -605,9 +772,13 @@ export const MediaBox: FC<{
             {data?.results
               ?.filter((f: any) => {
                 if (type === 'video') {
-                  return hasExtension(f.path, 'mp4');
-                } else if (type === 'image') {
-                  return !hasExtension(f.path, 'mp4');
+                  return isVideoFile(f.path);
+                }
+                if (type === 'audio') {
+                  return isAudioFile(f.path);
+                }
+                if (type === 'image') {
+                  return !!f.path && !isVideoFile(f.path) && !isAudioFile(f.path);
                 }
                 return true;
               })
@@ -615,24 +786,29 @@ export const MediaBox: FC<{
                 <div
                   className={clsx(
                     'group px-[3px] py-[3px] mobile:p-[6px] float-left rounded-[6px] w8-max mobile:!w-1/2 mobile:!max-w-[50%] aspect-square',
-                    !standalone && 'cursor-pointer'
+                    (!standalone || selectMode) && 'cursor-pointer'
                   )}
                   key={media.id}
                 >
                   <div
                     className={clsx(
                       'w-full h-full rounded-[6px] border-[4px] relative',
-                      !!selected.find((p) => p.id === media.id)
+                      (standalone && wholeLibrary) ||
+                        !!selected.find((p) => p.id === media.id)
                         ? 'border-[#612BD3]'
                         : 'border-transparent'
                     )}
                     onClick={addRemoveSelected(media)}
                   >
-                    {!!selected.find((p: any) => p.id === media.id) ? (
+                    {standalone && wholeLibrary ? (
+                      <div className="text-white flex z-[101] justify-center items-center text-[14px] font-[500] w-[24px] h-[24px] rounded-full bg-[#612BD3] absolute -bottom-[10px] -end-[10px]">
+                        ✓
+                      </div>
+                    ) : !!selected.find((p: any) => p.id === media.id) ? (
                       <div className="text-white flex z-[101] justify-center items-center text-[14px] font-[500] w-[24px] h-[24px] rounded-full bg-[#612BD3] absolute -bottom-[10px] -end-[10px]">
                         {selected.findIndex((z: any) => z.id === media.id) + 1}
                       </div>
-                    ) : (
+                    ) : selectMode ? null : (
                       <DeleteCircleIcon
                         className={clsx(
                           'cursor-pointer hidden z-[100] group-hover:block absolute -top-[5px] -end-[5px]',
@@ -641,6 +817,28 @@ export const MediaBox: FC<{
                         )}
                         onClick={deleteImage(media)}
                       />
+                    )}
+                    {standalone &&
+                      !selectMode &&
+                      !!media.path &&
+                      !isVideoFile(media.path) &&
+                      !isAudioFile(media.path) && (
+                        <div
+                          onClick={editImage(media)}
+                          title={t('edit', 'Edit')}
+                          className="cursor-pointer hidden z-[100] group-hover:flex justify-center items-center w-[26px] h-[26px] rounded-full bg-[#612BD3] text-white absolute -top-[5px] -start-[5px]"
+                        >
+                          <PencilIcon size={14} />
+                        </div>
+                      )}
+                    {standalone && !selectMode && isVideoFile(media.path) && (
+                      <div
+                        onClick={editVideo(media)}
+                        title={t('edit', 'Edit')}
+                        className="cursor-pointer hidden z-[100] group-hover:flex justify-center items-center w-[26px] h-[26px] rounded-full bg-[#612BD3] text-white absolute -top-[5px] -start-[5px]"
+                      >
+                        <PencilIcon size={14} />
+                      </div>
                     )}
                     <div
                       className={clsx(
@@ -656,7 +854,9 @@ export const MediaBox: FC<{
                           onClick={maximize(media)}
                           className={clsx(
                             'cursor-pointer p-[4px] bg-black/40 hidden group-hover:block hover:scale-150 transition-all',
-                            !standalone && 'mobile:!hidden'
+                            !standalone && 'mobile:!hidden',
+                            selectMode && '!hidden',
+                            (!media.path || isAudioFile(media.path)) && '!hidden'
                           )}
                         >
                           <svg
@@ -673,8 +873,22 @@ export const MediaBox: FC<{
                           </svg>
                         </div>
                       </div>
-                      {hasExtension(media.path, 'mp4') ? (
-                        <VideoFrame url={mediaDirectory.set(media.path)} />
+                      {!media.path ? (
+                        <div className="w-full h-full flex items-center justify-center text-center text-[12px] px-[8px]">
+                          {media.status === 'failed'
+                            ? media.processingError ||
+                              t('video_edit_failed', 'Render failed')
+                            : t('video_edit_rendering', 'Rendering…')}
+                        </div>
+                      ) : isVideoFile(media.path) ? (
+                        <VideoFrame
+                          url={mediaDirectory.set(media.path)}
+                          showDuration
+                        />
+                      ) : isAudioFile(media.path) ? (
+                        <div className="w-full h-full flex items-center justify-center text-center text-[12px] px-[8px]">
+                          {media.originalName || media.name}
+                        </div>
                       ) : (
                         <img
                           width="100%"
@@ -859,11 +1073,13 @@ export const MultiMediaComponent: FC<{
   const designMedia = useCallback(() => {
     if (!!user?.tier?.ai && !dummy) {
       modals.openModal({
-        askClose: false,
+        askClose: true,
         title: t('design_media', 'Design Media'),
-        size: '80%',
+        fullScreen: true,
+        size: 'calc(100% - 80px)',
+        height: 'calc(100% - 80px)',
         children: (close) => (
-          <Polonto setMedia={changeMedia} closeModal={close} />
+          <MediaEditor setMedia={changeMedia} closeModal={close} />
         ),
       });
     }
@@ -921,7 +1137,7 @@ export const MultiMediaComponent: FC<{
                       >
                         <MediaSettingsIcon className="cursor-pointer relative z-[200]" />
                       </div>
-                      {hasExtension(media?.path, 'mp4') ? (
+                      {isVideoFile(media?.path) ? (
                         <VideoFrame url={mediaDirectory.set(media?.path)} />
                       ) : (
                         <img
@@ -1066,13 +1282,13 @@ export const MediaComponent: FC<{
   const showDesignModal = useCallback(() => {
     modals.openModal({
       title: t('media_editor', 'Media Editor'),
-      askClose: false,
+      askClose: true,
       closeOnEscape: true,
       fullScreen: true,
       size: 'calc(100% - 80px)',
       height: 'calc(100% - 80px)',
       children: (close) => (
-        <Polonto
+        <MediaEditor
           width={width}
           height={height}
           setMedia={changeMedia}

@@ -38,6 +38,8 @@ import { SkoolProvider } from '@gitroom/nestjs-libraries/integrations/social/sko
 import { WhopProvider } from '@gitroom/nestjs-libraries/integrations/social/whop.provider';
 import { MeweProvider } from '@gitroom/nestjs-libraries/integrations/social/mewe.provider';
 import { TumblrProvider } from '@gitroom/nestjs-libraries/integrations/social/tumblr.provider';
+import { WebhookProvider } from '@gitroom/nestjs-libraries/integrations/social/webhook.provider';
+import { BufferProvider } from '@gitroom/nestjs-libraries/integrations/social/buffer.provider';
 
 export const socialIntegrationList: Array<SocialAbstract & SocialProvider> = [
   new XProvider(),
@@ -75,6 +77,8 @@ export const socialIntegrationList: Array<SocialAbstract & SocialProvider> = [
   new SkoolProvider(),
   new MeweProvider(),
   new TumblrProvider(),
+  new WebhookProvider(),
+  new BufferProvider(),
   // new MastodonCustomProvider(),
 ];
 
