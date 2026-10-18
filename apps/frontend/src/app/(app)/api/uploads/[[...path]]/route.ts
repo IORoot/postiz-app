@@ -36,7 +36,18 @@ export const GET = async (
   if (filePath !== base && !filePath.startsWith(base + sep)) {
     return new NextResponse('Not found', { status: 404 });
   }
-  const fileStats = statSync(filePath);
+  let fileStats;
+  try {
+    fileStats = statSync(filePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return new NextResponse('Not found', { status: 404 });
+    }
+    throw err;
+  }
+  if (!fileStats.isFile()) {
+    return new NextResponse('Not found', { status: 404 });
+  }
   const contentType = mime.getType(filePath) || 'application/octet-stream';
 
   // Honor ranged requests: providers that push video in chunks (TikTok,

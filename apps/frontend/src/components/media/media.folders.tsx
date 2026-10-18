@@ -25,8 +25,13 @@ export const MediaFoldersSidebar: FC<{
   const [renameValue, setRenameValue] = useState('');
 
   const loadFolders = useCallback(async () => {
-    return (await fetch('/media/folders')).json();
-  }, []);
+    const response = await fetch('/media/folders');
+    if (!response.ok) {
+      return [];
+    }
+    const body = await response.json();
+    return Array.isArray(body) ? body : [];
+  }, [fetch]);
 
   const { data: folders, mutate } = useSWR<MediaFolder[]>(
     'get-media-folders',
@@ -98,7 +103,7 @@ export const MediaFoldersSidebar: FC<{
       >
         {t('all_media', 'All media')}
       </div>
-      {(folders || []).map((folder) => (
+      {(Array.isArray(folders) ? folders : []).map((folder) => (
         <div
           key={folder.id}
           className={clsx(
