@@ -14,6 +14,10 @@ COPY libraries/nestjs-libraries/src/dtos/posts/bulk.posts.dto.ts \
      /app/libraries/nestjs-libraries/src/dtos/posts/bulk.posts.dto.ts
 COPY libraries/nestjs-libraries/src/dtos/media/bulk.delete.media.dto.ts \
      /app/libraries/nestjs-libraries/src/dtos/media/bulk.delete.media.dto.ts
+COPY libraries/nestjs-libraries/src/dtos/media/bulk.move.media.dto.ts \
+     /app/libraries/nestjs-libraries/src/dtos/media/bulk.move.media.dto.ts
+COPY libraries/nestjs-libraries/src/dtos/media/save.media.durations.dto.ts \
+     /app/libraries/nestjs-libraries/src/dtos/media/save.media.durations.dto.ts
 COPY libraries/nestjs-libraries/src/dtos/media/create.media.folder.dto.ts \
      /app/libraries/nestjs-libraries/src/dtos/media/create.media.folder.dto.ts
 COPY libraries/nestjs-libraries/src/dtos/media/move.media.dto.ts \
@@ -54,6 +58,8 @@ COPY apps/frontend/src/components/launches/filters.tsx \
      /app/apps/frontend/src/components/launches/filters.tsx
 COPY apps/frontend/src/components/media/media.component.tsx \
      /app/apps/frontend/src/components/media/media.component.tsx
+COPY apps/frontend/src/app/global.scss \
+     /app/apps/frontend/src/app/global.scss
 COPY apps/frontend/src/components/media/media.folders.tsx \
      /app/apps/frontend/src/components/media/media.folders.tsx
 COPY apps/frontend/src/components/media/media.bulk.actions.tsx \
