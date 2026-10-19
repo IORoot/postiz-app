@@ -69,6 +69,76 @@ const isAudioFile = (path?: string | null) =>
   hasExtension(path, 'mp3') ||
   hasExtension(path, 'm4a') ||
   hasExtension(path, 'wav');
+
+type MediaSort = 'createdAt' | 'name' | 'duration';
+type MediaDir = 'asc' | 'desc';
+
+const previewMediaClass =
+  'block w-auto h-auto max-w-[calc(100vw-140px)] max-h-[calc(100dvh-220px)] object-contain';
+
+const MediaPlayback: FC<{ path: string; video: boolean }> = ({ path, video }) => {
+  if (video) {
+    return (
+      <video
+        className={previewMediaClass}
+        src={path}
+        controls
+        autoPlay
+        playsInline
+      />
+    );
+  }
+  return <img className={previewMediaClass} src={path} alt="" />;
+};
+
+const readDuration = (url: string) =>
+  new Promise<number | null>((resolve) => {
+    const media = isAudioFile(url)
+      ? document.createElement('audio')
+      : document.createElement('video');
+    media.preload = 'metadata';
+    let settled = false;
+    const finish = (value: number | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.clearTimeout(timer);
+      media.onloadedmetadata = null;
+      media.onerror = null;
+      media.removeAttribute('src');
+      media.load();
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => finish(null), 12000);
+    media.onloadedmetadata = () => {
+      const seconds = media.duration;
+      finish(Number.isFinite(seconds) && seconds > 0 ? seconds : null);
+    };
+    media.onerror = () => finish(null);
+    media.src = url;
+  });
+
+const readDurations = async (rows: { id: string; path: string }[]) => {
+  const found: { id: string; duration: number }[] = [];
+  let index = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, rows.length) }, async () => {
+      while (index < rows.length) {
+        const row = rows[index++];
+        const duration = await readDuration(row.path);
+        if (duration) {
+          found.push({
+            id: row.id,
+            duration: Math.round(duration * 1000) / 1000,
+          });
+        }
+      }
+    })
+  );
+  return found;
+};
+
 const showModalEmitter = new EventEmitter();
 // on phones the media library takes the whole screen
 export const mediaLibrarySize = () =>
@@ -263,6 +333,9 @@ export const MediaBox: FC<{
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 300);
+  const [sort, setSort] = useState<MediaSort>('createdAt');
+  const [dir, setDir] = useState<MediaDir>('desc');
+  const [measuring, setMeasuring] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string | undefined>();
   const fetch = useFetch();
   const modals = useModals();
@@ -273,7 +346,7 @@ export const MediaBox: FC<{
       setSelected([]);
       setWholeLibrary(false);
     }
-  }, [debouncedSearch, selectedFolder]);
+  }, [debouncedSearch, selectedFolder, sort, dir]);
   const loadMedia = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page + 1) });
     if (debouncedSearch.trim()) {
@@ -282,10 +355,12 @@ export const MediaBox: FC<{
     if (selectedFolder) {
       params.set('folderId', selectedFolder);
     }
+    params.set('sort', sort);
+    params.set('dir', dir);
     return (await fetch(`/media?${params.toString()}`)).json();
-  }, [page, debouncedSearch, selectedFolder]);
+  }, [page, debouncedSearch, selectedFolder, sort, dir]);
   const { data, mutate, isLoading } = useSWR(
-    `get-media-${page}-${debouncedSearch}-${selectedFolder || ''}`,
+    `get-media-${page}-${debouncedSearch}-${selectedFolder || ''}-${sort}-${dir}`,
     loadMedia,
     {
       refreshInterval: (latest: { results?: { status?: string }[] }) =>
@@ -302,6 +377,81 @@ export const MediaBox: FC<{
     },
     [mutate]
   );
+  const reportedDuration = useRef(new Set<string>());
+  const refreshMedia = useRef(mutate);
+  refreshMedia.current = mutate;
+  const rememberDuration = useCallback(
+    (id: string, seconds: number) => {
+      if (reportedDuration.current.has(id)) {
+        return;
+      }
+      reportedDuration.current.add(id);
+      fetch('/media/duration', {
+        method: 'POST',
+        body: JSON.stringify({
+          items: [{ id, duration: Math.round(seconds * 1000) / 1000 }],
+        }),
+      });
+    },
+    [fetch]
+  );
+  useEffect(() => {
+    if (sort !== 'duration') {
+      return;
+    }
+    let cancel = false;
+    const run = async () => {
+      setMeasuring(true);
+      let savedAny = false;
+      try {
+        while (!cancel) {
+          const params = new URLSearchParams();
+          if (debouncedSearch.trim()) {
+            params.set('search', debouncedSearch.trim());
+          }
+          if (selectedFolder) {
+            params.set('folderId', selectedFolder);
+          }
+          const response = await fetch(
+            `/media/missing-duration?${params.toString()}`
+          );
+          if (!response.ok || cancel) {
+            break;
+          }
+          const rows: { id: string; path: string }[] = await response.json();
+          if (!Array.isArray(rows) || !rows.length) {
+            break;
+          }
+          const measured = await readDurations(rows);
+          if (cancel || !measured.length) {
+            break;
+          }
+          const saved = await fetch('/media/duration', {
+            method: 'POST',
+            body: JSON.stringify({ items: measured }),
+          });
+          if (!saved.ok) {
+            break;
+          }
+          savedAny = true;
+          if (rows.length < 80) {
+            break;
+          }
+        }
+        if (!cancel && savedAny) {
+          await refreshMedia.current();
+        }
+      } finally {
+        if (!cancel) {
+          setMeasuring(false);
+        }
+      }
+    };
+    run();
+    return () => {
+      cancel = true;
+    };
+  }, [sort, debouncedSearch, selectedFolder, fetch]);
   const [selected, setSelected] = useState<any[]>([]);
   // the standalone library selects only to delete in bulk
   const [selectMode, setSelectMode] = useState(false);
@@ -490,28 +640,18 @@ export const MediaBox: FC<{
       e.stopPropagation();
       modals.openModal({
         title: '',
-        top: 10,
+        top: 24,
+        size: 'fit-content',
+        maxSize: 'calc(100vw - 48px)',
         children: (
-          <div className="w-full h-full p-[50px]">
-            {isVideoFile(media.path) ? (
-              <VideoFrame
-                autoplay={true}
-                url={mediaDirectory.set(media.path)}
-              />
-            ) : (
-              <img
-                width="100%"
-                height="100%"
-                className="w-full h-full max-h-[100%] max-w-[100%] object-cover"
-                src={mediaDirectory.set(media.path)}
-                alt="media"
-              />
-            )}
-          </div>
+          <MediaPlayback
+            path={mediaDirectory.set(media.path)}
+            video={isVideoFile(media.path)}
+          />
         ),
       });
     },
-    [],
+    [mediaDirectory],
   );
 
   const editImage = useCallback(
@@ -682,6 +822,45 @@ export const MediaBox: FC<{
               className="w-full h-[44px] px-[14px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none focus:border-[#612BD3]"
             />
           </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as MediaSort)}
+            className="h-[44px] px-[10px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none"
+          >
+            <option value="createdAt">{t('sort_date', 'Date')}</option>
+            <option value="name">{t('sort_file_name', 'File name')}</option>
+            <option value="duration">{t('sort_duration', 'Duration')}</option>
+          </select>
+          <select
+            value={dir}
+            onChange={(e) => setDir(e.target.value as MediaDir)}
+            title={
+              sort === 'duration'
+                ? t(
+                    'duration_sort_hint',
+                    'Pictures have no length, so they stay at the end'
+                  )
+                : undefined
+            }
+            className="h-[44px] px-[10px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none"
+          >
+            {sort === 'name' ? (
+              <>
+                <option value="asc">{t('sort_name_asc', 'A–Z')}</option>
+                <option value="desc">{t('sort_name_desc', 'Z–A')}</option>
+              </>
+            ) : sort === 'duration' ? (
+              <>
+                <option value="asc">{t('sort_duration_asc', 'Shortest')}</option>
+                <option value="desc">{t('sort_duration_desc', 'Longest')}</option>
+              </>
+            ) : (
+              <>
+                <option value="desc">{t('sort_date_desc', 'Newest')}</option>
+                <option value="asc">{t('sort_date_asc', 'Oldest')}</option>
+              </>
+            )}
+          </select>
           <input
             type="file"
             ref={uploaderRef}
@@ -724,6 +903,11 @@ export const MediaBox: FC<{
             </div>
           )}
         </div>
+        {measuring && (
+          <div className="mt-[8px] text-[13px] text-textColor/70">
+            {t('reading_durations', 'Reading video lengths…')}
+          </div>
+        )}
         {standalone && selectMode && (
           <div className="mt-[12px]">
             <MediaBulkActionsBar
@@ -943,6 +1127,11 @@ export const MediaBox: FC<{
                         <VideoFrame
                           url={mediaDirectory.set(media.path)}
                           showDuration
+                          onDuration={
+                            media.duration == null
+                              ? (seconds) => rememberDuration(media.id, seconds)
+                              : undefined
+                          }
                         />
                       ) : isAudioFile(media.path) ? (
                         <div className="w-full h-full flex items-center justify-center text-center text-[12px] px-[8px]">

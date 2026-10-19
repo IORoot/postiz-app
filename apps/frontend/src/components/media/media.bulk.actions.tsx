@@ -1,6 +1,7 @@
 'use client';
 
 import { FC, useCallback, useState } from 'react';
+import useSWR from 'swr';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -114,6 +115,46 @@ export const useBulkMediaActions = (
     await send(false);
   }, [send, t, target]);
 
+  const move = useCallback(
+    async (targetFolderId?: string) => {
+      setBusy(true);
+      try {
+        const response = await fetch('/media/bulk/move', {
+          method: 'POST',
+          body: JSON.stringify(
+            selection.all
+              ? {
+                  all: true,
+                  search: selection.search.trim() || undefined,
+                  folderId: selection.folderId,
+                  targetFolderId,
+                }
+              : { ids: selection.ids, targetFolderId }
+          ),
+        });
+
+        if (!response.ok) {
+          toaster.show(
+            t('bulk_media_failed', 'Something went wrong, please try again'),
+            'warning'
+          );
+          return;
+        }
+
+        const result: { moved: number } = await response.json();
+        toaster.show(
+          t('media_moved', 'Moved: {{n}}', { n: result.moved }),
+          'success'
+        );
+        onDone();
+        return true;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [fetch, toaster, t, onDone, selection]
+  );
+
   const deleteFiles = useCallback(async () => {
     if (
       !(await deleteDialog(
@@ -130,7 +171,7 @@ export const useBulkMediaActions = (
     await send(true);
   }, [send, t, target]);
 
-  return { busy, tooMany, hide, deleteFiles };
+  return { busy, tooMany, hide, deleteFiles, move };
 };
 
 export const MediaBulkActionsBar: FC<{
@@ -151,11 +192,28 @@ export const MediaBulkActionsBar: FC<{
   onDone,
 }) => {
   const t = useT();
-  const { busy, tooMany, hide, deleteFiles } = useBulkMediaActions(
+  const fetch = useFetch();
+  const { busy, tooMany, hide, deleteFiles, move } = useBulkMediaActions(
     selection,
     onDone
   );
+  const [destination, setDestination] = useState('');
+  const loadFolders = useCallback(async () => {
+    const response = await fetch('/media/folders');
+    if (!response.ok) {
+      return [];
+    }
+    const body = await response.json();
+    return Array.isArray(body) ? body : [];
+  }, [fetch]);
+  const { data: folders } = useSWR<{ id: string; name: string }[]>(
+    'get-media-folders',
+    loadFolders
+  );
   const hasSelection = selection.all || selection.ids.length > 0;
+  const folderChoices = (folders || []).filter(
+    (folder) => !(selection.all && folder.id === selection.folderId)
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-[10px] px-[12px] py-[8px] border border-newTableBorder bg-newBgColorInner rounded-[8px] text-[14px] text-textColor">
@@ -190,6 +248,38 @@ export const MediaBulkActionsBar: FC<{
         </div>
       )}
       <div className="flex-1" />
+      {!!folders?.length && (
+        <select
+          value={destination}
+          onChange={(e) => setDestination(e.target.value)}
+          className="h-[34px] max-w-[180px] px-[8px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[14px] outline-none"
+        >
+          <option value="">{t('move_to_folder', 'Move to folder…')}</option>
+          <option value="root">{t('no_folder', 'No folder')}</option>
+          {folderChoices.map((folder) => (
+            <option key={folder.id} value={folder.id}>
+              {folder.name}
+            </option>
+          ))}
+        </select>
+      )}
+      {!!folders?.length && (
+        <Button
+          secondary
+          className="rounded-[8px] !h-[34px] !px-[12px]"
+          disabled={!hasSelection || !destination || tooMany || busy}
+          onClick={async () => {
+            const moved = await move(
+              destination === 'root' ? undefined : destination
+            );
+            if (moved) {
+              setDestination('');
+            }
+          }}
+        >
+          {t('move', 'Move')}
+        </Button>
+      )}
       <Button
         secondary
         className="rounded-[8px] !h-[34px] !px-[12px]"

@@ -225,6 +225,8 @@ model Media {
   updatedAt          DateTime            @updatedAt
   deletedAt          DateTime?
   fileSize           Int                 @default(0)
+  // seconds, filled when a video or audio file is opened; images stay empty
+  duration           Float?
   type               String              @default("image")
   thumbnail          String?
   alt                String?

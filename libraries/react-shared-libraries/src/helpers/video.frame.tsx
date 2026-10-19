@@ -14,8 +14,9 @@ export const VideoFrame: FC<{
   url: string;
   autoplay?: boolean;
   showDuration?: boolean;
+  onDuration?: (seconds: number) => void;
 }> = (props) => {
-  const { url, showDuration } = props;
+  const { url, showDuration, onDuration } = props;
   const [duration, setDuration] = useState<number>();
   return (
     <>
@@ -25,8 +26,17 @@ export const VideoFrame: FC<{
         preload="metadata"
         autoPlay={!!props?.autoplay}
         onLoadedMetadata={
-          showDuration
-            ? (e) => setDuration(e.currentTarget.duration)
+          showDuration || onDuration
+            ? (e) => {
+                const seconds = e.currentTarget.duration;
+                if (!Number.isFinite(seconds) || seconds <= 0) {
+                  return;
+                }
+                if (showDuration) {
+                  setDuration(seconds);
+                }
+                onDuration?.(seconds);
+              }
             : undefined
         }
       />

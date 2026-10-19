@@ -9,6 +9,8 @@ import {
   BulkDeleteMediaDto,
   BulkDeleteMediaResult,
 } from '@gitroom/nestjs-libraries/dtos/media/bulk.delete.media.dto';
+import { BulkMoveMediaDto } from '@gitroom/nestjs-libraries/dtos/media/bulk.move.media.dto';
+import { SaveMediaDurationsDto } from '@gitroom/nestjs-libraries/dtos/media/save.media.durations.dto';
 import { chunk } from 'lodash';
 import { CreateMediaFolderDto } from '@gitroom/nestjs-libraries/dtos/media/create.media.folder.dto';
 import { RenameMediaFolderDto } from '@gitroom/nestjs-libraries/dtos/media/rename.media.folder.dto';
@@ -515,8 +517,47 @@ export class MediaService {
     );
   }
 
-  getMedia(org: string, page: number, search?: string, folderId?: string) {
-    return this._mediaRepository.getMedia(org, page, search, folderId);
+  getMedia(
+    org: string,
+    page: number,
+    search?: string,
+    folderId?: string,
+    sort?: string,
+    dir?: string
+  ) {
+    return this._mediaRepository.getMedia(
+      org,
+      page,
+      search,
+      folderId,
+      sort,
+      dir
+    );
+  }
+
+  async bulkMoveMedia(org: string, body: BulkMoveMediaDto) {
+    const targetFolderId = body.targetFolderId || null;
+    if (targetFolderId) {
+      const folder = await this._mediaRepository.getFolder(org, targetFolderId);
+      if (!folder) {
+        throw new BadRequestException('Folder not found');
+      }
+    }
+    const { count } = await this._mediaRepository.moveManyMedia(
+      org,
+      body,
+      targetFolderId
+    );
+    return { moved: count };
+  }
+
+  listMissingDuration(org: string, search?: string, folderId?: string) {
+    return this._mediaRepository.listMissingDuration(org, search, folderId);
+  }
+
+  async saveDurations(org: string, body: SaveMediaDurationsDto) {
+    const saved = await this._mediaRepository.saveDurations(org, body.items);
+    return { saved: saved.reduce((sum, row) => sum + row.count, 0) };
   }
 
   saveMediaInformation(org: string, data: SaveMediaInformationDto) {

@@ -3,7 +3,6 @@ name: Publish GHCR image
 on:
   push:
     branches:
-      - webhook-media-and-settings
       - main
   workflow_dispatch:
 

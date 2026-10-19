@@ -214,6 +214,8 @@ export class MediaRepository {
     page: number,
     search?: string,
     folderId?: string,
+    sort?: string,
+    dir?: string,
   ) {
     const pageNum = (page || 1) - 1;
     const trimmedSearch = search?.trim();
@@ -239,9 +241,7 @@ export class MediaRepository {
     );
     const results = await this._media.model.media.findMany({
       where,
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: mediaOrder(sort, dir),
       select: {
         id: true,
         name: true,
@@ -251,6 +251,7 @@ export class MediaRepository {
         alt: true,
         thumbnailTimestamp: true,
         createdAt: true,
+        duration: true,
         status: true,
         processingError: true,
         type: true,
@@ -337,6 +338,121 @@ export class MediaRepository {
       data: {
         folderId: folderId || null,
       },
+      select: {
+        id: true,
+      },
     });
   }
+
+  getFolder(org: string, id: string) {
+    return this._mediaFolder.model.mediaFolder.findFirst({
+      where: {
+        id,
+        organizationId: org,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
+
+  moveManyMedia(
+    org: string,
+    filter: { ids?: string[]; all?: boolean; search?: string; folderId?: string },
+    targetFolderId: string | null
+  ) {
+    const trimmedSearch = filter.search?.trim();
+    return this._media.model.media.updateMany({
+      where: {
+        organizationId: org,
+        deletedAt: null,
+        status: { not: 'processing' },
+        ...(filter.all
+          ? {
+              ...(filter.folderId ? { folderId: filter.folderId } : {}),
+              ...(trimmedSearch
+                ? {
+                    originalName: {
+                      contains: trimmedSearch,
+                      mode: 'insensitive' as const,
+                    },
+                  }
+                : {}),
+            }
+          : { id: { in: filter.ids || [] } }),
+      },
+      data: {
+        folderId: targetFolderId,
+      },
+    });
+  }
+
+  // Videos and audio the library has not measured yet, so duration sort can fill them in.
+  listMissingDuration(
+    org: string,
+    search?: string,
+    folderId?: string,
+    take = 80
+  ) {
+    const trimmedSearch = search?.trim();
+    return this._media.model.media.findMany({
+      where: {
+        organizationId: org,
+        deletedAt: null,
+        status: { not: 'processing' },
+        duration: null,
+        ...(folderId ? { folderId } : {}),
+        ...(trimmedSearch
+          ? {
+              originalName: {
+                contains: trimmedSearch,
+                mode: 'insensitive',
+              },
+            }
+          : {}),
+        OR: TIMED_MEDIA.map((ext) => ({
+          path: { endsWith: ext, mode: 'insensitive' as const },
+        })),
+      },
+      select: {
+        id: true,
+        path: true,
+      },
+      take,
+    });
+  }
+
+  saveDurations(org: string, items: { id: string; duration: number }[]) {
+    return Promise.all(
+      items.map((item) =>
+        this._media.model.media.updateMany({
+          where: {
+            id: item.id,
+            organizationId: org,
+            deletedAt: null,
+          },
+          data: {
+            duration: item.duration,
+          },
+        })
+      )
+    );
+  }
 }
+
+const TIMED_MEDIA = ['.mp4', '.mov', '.mp3', '.m4a', '.wav'];
+
+const mediaOrder = (sort?: string, dir?: string) => {
+  const direction: Prisma.SortOrder = dir === 'asc' ? 'asc' : 'desc';
+  if (sort === 'name') {
+    return [
+      { originalName: { sort: direction, nulls: 'last' as const } },
+      { name: direction },
+    ];
+  }
+  if (sort === 'duration') {
+    return { duration: { sort: direction, nulls: 'last' as const } };
+  }
+  return { createdAt: direction };
+};
