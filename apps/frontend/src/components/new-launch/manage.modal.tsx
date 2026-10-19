@@ -22,6 +22,9 @@ import {
 import { getProviderSettingsMeta } from '@gitroom/frontend/components/new-launch/providers/high.order.provider';
 import { useExistingData } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
 import { useLaunchStore } from '@gitroom/frontend/components/new-launch/store';
+import { usePipelineList } from '@gitroom/frontend/components/pipelines/use.pipeline.list';
+import { formatPipelineSlot } from '@gitroom/frontend/components/pipelines/pipeline.utils';
+import { setLastPipelineId } from '@gitroom/frontend/components/new-launch/last-pipeline';
 import {
   DatePicker,
   DatePickerPanel,
@@ -105,6 +108,8 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     setHide,
     channelDates,
     setChannelDate,
+    pipelineId,
+    setPipelineId,
   } = useLaunchStore(
     useShallow((state) => ({
       hide: state.hide,
@@ -123,7 +128,49 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       setSelectedIntegrations: state.setSelectedIntegrations,
       locked: state.locked,
       activateExitButton: state.activateExitButton,
+      pipelineId: state.pipelineId,
+      setPipelineId: state.setPipelineId,
     }))
+  );
+  const { data: pipelines } = usePipelineList();
+  const activePipelines = useMemo(
+    () => (pipelines || []).filter((pipeline) => pipeline.active),
+    [pipelines]
+  );
+  const selectedPipeline = activePipelines.find(
+    (pipeline) => pipeline.id === pipelineId
+  );
+  const pipelineMode = !!selectedPipeline && !existingData?.integration;
+  const queuedPipeline = existingData as {
+    pipelineQueueItemId?: string;
+    pipelineQueueItemStatus?: string;
+  };
+  const editingQueuedPipeline =
+    !!queuedPipeline?.pipelineQueueItemId &&
+    queuedPipeline?.pipelineQueueItemStatus !== 'PUBLISHED' &&
+    queuedPipeline?.pipelineQueueItemStatus !== 'PUBLISHING';
+  const selectPipeline = useCallback(
+    (nextPipelineId: string) => {
+      if (!nextPipelineId) {
+        setPipelineId(undefined);
+        return;
+      }
+      const pipeline = activePipelines.find(
+        (candidate) => candidate.id === nextPipelineId
+      );
+      if (!pipeline) {
+        return;
+      }
+      setPipelineId(pipeline.id);
+      setLastPipelineId(pipeline.id);
+      setSelectedIntegrations(
+        pipeline.channels.map((integration) => ({
+          selectedIntegrations: integration,
+          settings: {},
+        }))
+      );
+    },
+    [activePipelines, setPipelineId, setSelectedIntegrations]
   );
   // the other channels of an existing post show and move only their own date
   const channelDate = channelDates[current];
@@ -316,6 +363,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
 
   const schedule = useCallback(
     (type: 'draft' | 'now' | 'schedule' | 'update') => async () => {
+      if (editingQueuedPipeline && type === 'schedule') {
+        type = 'draft';
+      }
       let republish = false;
       // the channels saved as another type, the rest are saved as `type`
       const saveAs: Record<string, 'draft' | 'schedule' | 'update'> = {};
@@ -730,6 +780,38 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       if (!dummy) {
         if (addEditSets) {
           addEditSets(data);
+        } else if (pipelineMode && type === 'schedule') {
+          const response = await fetch('/pipelines/enqueue', {
+            method: 'POST',
+            body: JSON.stringify({
+              pipelineId: selectedPipeline!.id,
+              post: {
+                type: 'draft',
+                tags: data.tags,
+                shortLink: data.shortLink,
+                posts: data.posts,
+              },
+            }),
+          });
+          if (!response.ok) {
+            const { message } = await response.json().catch(() => ({}));
+            toaster.show(
+              typeof message === 'string'
+                ? message
+                : t(
+                    'unable_to_add_to_pipeline',
+                    'Unable to add this content to the Pipeline.'
+                  ),
+              'warning'
+            );
+            setLoading(false);
+            return;
+          }
+          toaster.show(t('added_to_pipeline', 'Added to Pipeline'), 'success');
+          mutate();
+          modal.closeAll();
+          setLoading(false);
+          return;
         } else {
           // every type of save is its own request, the drafts last, since a
           // draft save skips the checks the others still run
@@ -802,10 +884,17 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       addEditSets,
       dummy,
       shortlinkPreferenceData,
+      pipelineMode,
+      selectedPipeline,
+      editingQueuedPipeline,
     ]
   );
 
-  const scheduleLabel = dummy
+  const scheduleLabel = pipelineMode
+    ? t('add_to_pipeline', 'Add to Pipeline')
+    : editingQueuedPipeline
+    ? t('save_in_pipeline', 'Save in queue')
+    : dummy
     ? t('create_output', 'Create output')
     : !existingData?.integration
     ? t('add_to_calendar', 'Add to calendar')
@@ -1102,7 +1191,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
               />
             )}
 
-            {!dummy && (
+            {!dummy && !pipelineMode && (
               <RepeatComponent repeat={repeater} onChange={setRepeater} />
             )}
           </div>
@@ -1118,7 +1207,35 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 <div>{t('delete_post', 'Delete Post')}</div>
               </button>
             )}
-            <DatePicker onChange={setPickerDate} date={pickerDate} />
+            {!existingData?.integration &&
+              !dummy &&
+              activePipelines.length > 0 && (
+                <select
+                  aria-label={t('publishing_mode', 'Publishing mode')}
+                  value={pipelineId || ''}
+                  onChange={(event) => selectPipeline(event.target.value)}
+                  className="h-[44px] max-w-[220px] rounded-[8px] border border-newBorder bg-newBgColor px-[12px] text-[14px]"
+                >
+                  <option value="">{t('calendar', 'Calendar')}</option>
+                  {activePipelines.map((pipeline) => (
+                    <option key={pipeline.id} value={pipeline.id}>
+                      {pipeline.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            {pipelineMode ? (
+              <div className="h-[44px] px-[12px] flex items-center rounded-[8px] border border-newBorder text-[13px]">
+                {!selectedPipeline!.active
+                  ? t('pipeline_paused', 'Paused')
+                  : formatPipelineSlot(
+                      selectedPipeline!.projectedEnqueueFor,
+                      selectedPipeline!.timezone
+                    )}
+              </div>
+            ) : (
+              <DatePicker onChange={setPickerDate} date={pickerDate} />
+            )}
             {!addEditSets && (
               <button
                 disabled={
@@ -1154,7 +1271,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                   disabled={
                     selectedIntegrations.length === 0 || loading || locked
                   }
-                  onClick={schedule('schedule')}
+                  onClick={schedule(
+                    editingQueuedPipeline ? 'draft' : 'schedule'
+                  )}
                   className="text-white relative min-w-[180px] btnSub disabled:cursor-not-allowed disabled:opacity-80 outline-none gap-[8px] flex justify-center items-center h-[44px] rounded-[8px] bg-[#612BD3] ps-[20px] pe-[16px]"
                 >
                   {loading && (
@@ -1172,7 +1291,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                       ? t('check_circles_above', 'Check the circles above')
                       : scheduleLabel}
                   </div>
-                  {!dummy && (
+                  {!dummy && !pipelineMode && (
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1190,7 +1309,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                   )}
                 </button>
 
-                {!dummy && (
+                {!dummy && !pipelineMode && (
                   <button
                     onClick={schedule('now')}
                     disabled={

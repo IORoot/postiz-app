@@ -153,7 +153,11 @@ export class PostsRepository {
     }
   }
 
-  async getPosts(orgId: string, query: GetPostsDto) {
+  async getPosts(
+    orgId: string,
+    query: GetPostsDto,
+    options?: { excludeQueuedPipeline?: boolean }
+  ) {
     // Use the provided start and end dates directly
     const startDate = dayjs.utc(query.startDate).toDate();
     const endDate = dayjs.utc(query.endDate).toDate();
@@ -183,6 +187,20 @@ export class PostsRepository {
               },
             ],
           },
+          ...(options?.excludeQueuedPipeline
+            ? [
+                {
+                  NOT: {
+                    pipelineQueueItem: {
+                      is: {
+                        status: 'QUEUED' as const,
+                        deletedAt: null,
+                      },
+                    },
+                  },
+                },
+              ]
+            : []),
         ],
         integration: {
           deletedAt: null,
@@ -358,6 +376,22 @@ export class PostsRepository {
       limit,
       hasMore: skip + posts.length < total,
     };
+  }
+
+  getPipelineQueueItemForGroup(orgId: string, group: string) {
+    return this._post.model.post.findFirst({
+      where: {
+        organizationId: orgId,
+        group,
+        deletedAt: null,
+        pipelineQueueItemId: { not: null },
+      },
+      select: {
+        pipelineQueueItem: {
+          select: { id: true, status: true, deletedAt: true },
+        },
+      },
+    });
   }
 
   async deletePost(orgId: string, group: string) {
@@ -635,7 +669,8 @@ export class PostsRepository {
     keepGroup = false,
     // Shared by the posts saved together for several channels, so opening one
     // of them in the editor brings the others.
-    batchId?: string
+    batchId?: string,
+    pipelineQueueItemId?: string
   ) {
     const posts: Post[] = [];
     const uuid = uuidv4();
@@ -710,6 +745,13 @@ export class PostsRepository {
             id: orgId,
           },
         },
+        ...(pipelineQueueItemId
+          ? {
+              pipelineQueueItem: {
+                connect: { id: pipelineQueueItemId },
+              },
+            }
+          : {}),
       });
 
       posts.push(
@@ -805,6 +847,8 @@ export class PostsRepository {
         where: {
           group: body.group,
           deletedAt: null,
+          integrationId: body.integration.id,
+          ...(pipelineQueueItemId ? { pipelineQueueItemId } : {}),
           id: {
             notIn: posts.map((p) => p.id),
           },

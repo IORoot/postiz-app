@@ -6,6 +6,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { PostsRepository } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.repository';
+import { PipelineRepository } from '@gitroom/nestjs-libraries/database/prisma/pipelines/pipeline.repository';
 import { CreatePostDto } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
 import dayjs from 'dayjs';
 import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
@@ -76,7 +77,8 @@ export class PostsService {
     private _shortLinkService: ShortLinkService,
     private _openaiService: OpenaiService,
     private _temporalService: TemporalService,
-    private _refreshIntegrationService: RefreshIntegrationService
+    private _refreshIntegrationService: RefreshIntegrationService,
+    private _pipelineRepository: PipelineRepository
   ) {}
 
   searchForMissingThreeHoursPosts() {
@@ -480,7 +482,9 @@ export class PostsService {
 
   async getPostsMinified(orgId: string, query: GetPostsDto) {
     return minifyPosts({
-      posts: await this._postRepository.getPosts(orgId, query),
+      posts: await this._postRepository.getPosts(orgId, query, {
+        excludeQueuedPipeline: true,
+      }),
     });
   }
 
@@ -849,6 +853,7 @@ export class PostsService {
   }
 
   async deletePost(orgId: string, group: string) {
+    await this._pipelineRepository.removeQueueItemByGroup(orgId, group);
     const post = await this._postRepository.deletePost(orgId, group);
 
     if (post?.id) {
@@ -1210,7 +1215,32 @@ export class PostsService {
   ): Promise<any[]> {
     const postList = [];
     const batchId = uuidv4();
+    let publishedPipelineItemIdToDetach: string | undefined;
     for (const post of body.posts) {
+      const queuedPipelineItem = post.group
+        ? await this._postRepository.getPipelineQueueItemForGroup(
+            orgId,
+            post.group
+          )
+        : null;
+      const pipelineQueueItem = queuedPipelineItem?.pipelineQueueItem;
+      if (pipelineQueueItem?.status === 'PUBLISHING') {
+        throw new BadRequestException(
+          'Publishing Pipeline content cannot be edited'
+        );
+      }
+      const pipelineQueueItemId =
+        pipelineQueueItem?.status === 'QUEUED' && !pipelineQueueItem.deletedAt
+          ? pipelineQueueItem.id
+          : undefined;
+      if (
+        body.republish &&
+        (body.type === 'schedule' || body.type === 'now') &&
+        pipelineQueueItem?.status === 'PUBLISHED' &&
+        !pipelineQueueItem.deletedAt
+      ) {
+        publishedPipelineItemIdToDetach = pipelineQueueItem.id;
+      }
       if (
         (body.type === 'schedule' || body.type === 'now') &&
         !body.republish &&
@@ -1251,8 +1281,9 @@ export class PostsService {
         body.tags,
         creationMethod,
         body.inter,
-        keepGroup,
-        batchId
+        keepGroup || !!pipelineQueueItemId,
+        batchId,
+        pipelineQueueItemId
       );
 
       if (!posts?.length) {
@@ -1278,6 +1309,13 @@ export class PostsService {
         postId: posts[0].id,
         integration: post.integration.id,
       });
+    }
+
+    if (publishedPipelineItemIdToDetach) {
+      await this._pipelineRepository.detachPublishedQueueItem(
+        orgId,
+        publishedPipelineItemIdToDetach
+      );
     }
 
     return postList;

@@ -38,6 +38,11 @@ export class BulkDeleteMediaDto {
   @IsString()
   search?: string;
 
+  // With `all`, limits the delete to this folder. Absent means the whole library.
+  @IsOptional()
+  @IsString()
+  folderId?: string;
+
   @IsBoolean()
   removeFiles: boolean;
 }

@@ -50,6 +50,10 @@ import { ErrorsRepository } from '@gitroom/nestjs-libraries/database/prisma/erro
 import { ErrorsService } from '@gitroom/nestjs-libraries/database/prisma/errors/errors.service';
 import { AdminStatsRepository } from '@gitroom/nestjs-libraries/database/prisma/admin-stats/admin-stats.repository';
 import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/admin-stats/admin-stats.service';
+import { PipelineRepository } from '@gitroom/nestjs-libraries/database/prisma/pipelines/pipeline.repository';
+import { PipelineExecutionRepository } from '@gitroom/nestjs-libraries/database/prisma/pipelines/pipeline.execution.repository';
+import { PipelineService } from '@gitroom/nestjs-libraries/database/prisma/pipelines/pipeline.service';
+import { PipelineManager } from '@gitroom/nestjs-libraries/database/prisma/pipelines/pipeline.manager';
 
 @Global()
 @Module({
@@ -109,6 +113,10 @@ import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/adm
     ErrorsService,
     AdminStatsRepository,
     AdminStatsService,
+    PipelineRepository,
+    PipelineExecutionRepository,
+    PipelineManager,
+    PipelineService,
   ],
   get exports() {
     return this.providers;

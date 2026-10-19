@@ -239,7 +239,20 @@ export const CalendarWeekProvider: FC<{
     }).toString();
 
     const data = await (await fetch(`/posts?${modifiedParams}`)).json();
-    return expandPosts(data);
+    const expanded = expandPosts(data);
+    const pipelineUrl = new URLSearchParams({
+      startDate: newDayjs(filters.startDate).startOf('day').utc().format(),
+      endDate: newDayjs(filters.endDate).endOf('day').utc().format(),
+      ...(filters.customer ? { customer: filters.customer.toString() } : {}),
+    }).toString();
+    const pipelineResponse = await fetch(`/pipelines/calendar?${pipelineUrl}`);
+    const pipelinePosts = pipelineResponse.ok
+      ? await pipelineResponse.json()
+      : [];
+    if (Array.isArray(pipelinePosts) && pipelinePosts.length) {
+      expanded.posts = [...(expanded.posts || []), ...pipelinePosts];
+    }
+    return expanded;
   }, [filters, params]);
 
   // List view data fetcher
