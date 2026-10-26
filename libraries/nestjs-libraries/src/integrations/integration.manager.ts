@@ -152,6 +152,45 @@ export class IntegrationManager {
     };
   }
 
+  // POST /integrations/function runs a provider method by name with the
+  // channel's token as its first argument, so only @Tool methods and the ones
+  // marked @DashboardFunction may be run that way.
+  // Providers that predate the mark (this fork, until a provider is decorated)
+  // keep the previous behavior. Once a class or its parent marks any method,
+  // everything else is refused.
+  isDashboardCallable(provider: SocialProvider, methodName: string) {
+    if (typeof (provider as any)[methodName] !== 'function') {
+      return false;
+    }
+
+    const isTool = this.getAllTools()[provider.identifier]?.some(
+      (p) => p.methodName === methodName
+    );
+    if (isTool) {
+      return true;
+    }
+
+    const marked = (target: object) =>
+      !!Reflect.getMetadata('custom:dashboard_function', target, methodName);
+
+    let proto: object | null = provider.constructor.prototype;
+    let anyMarked = false;
+    while (proto && proto !== Object.prototype) {
+      if (marked(proto)) {
+        return true;
+      }
+      anyMarked =
+        anyMarked ||
+        Object.getOwnPropertyNames(proto).some(
+          (name) =>
+            !!Reflect.getMetadata('custom:dashboard_function', proto, name)
+        );
+      proto = Object.getPrototypeOf(proto);
+    }
+
+    return !anyMarked;
+  }
+
   getAllTools(): {
     [key: string]: {
       description: string;

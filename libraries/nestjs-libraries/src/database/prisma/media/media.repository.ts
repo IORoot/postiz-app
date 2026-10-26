@@ -71,6 +71,29 @@ export class MediaRepository {
     });
   }
 
+  getMediaDetails(org: string, id: string) {
+    return this._media.model.media.findFirst({
+      where: {
+        id,
+        organizationId: org,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        originalName: true,
+        path: true,
+        fileSize: true,
+        type: true,
+        duration: true,
+        alt: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
   getMediaStatus(org: string, id: string) {
     return this._media.model.media.findFirst({
       where: {

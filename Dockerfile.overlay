@@ -76,6 +76,8 @@ COPY libraries/react-shared-libraries/src/translation/locales/en/translation.jso
      /app/libraries/react-shared-libraries/src/translation/locales/en/translation.json
 COPY libraries/nestjs-libraries/src/integrations/integration.manager.ts \
      /app/libraries/nestjs-libraries/src/integrations/integration.manager.ts
+COPY libraries/nestjs-libraries/src/integrations/dashboard.function.decorator.ts \
+     /app/libraries/nestjs-libraries/src/integrations/dashboard.function.decorator.ts
 COPY libraries/nestjs-libraries/src/integrations/social/social.integrations.interface.ts \
      /app/libraries/nestjs-libraries/src/integrations/social/social.integrations.interface.ts
 COPY libraries/nestjs-libraries/src/integrations/social/webhook.provider.ts \

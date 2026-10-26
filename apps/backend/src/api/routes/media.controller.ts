@@ -273,6 +273,14 @@ export class MediaController {
     return this._mediaService.listMissingDuration(org.id, search, folderId);
   }
 
+  @Get('/:id/details')
+  getMediaDetails(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._mediaService.getMediaDetails(org.id, id);
+  }
+
   @Get('/:id/probe')
   probeMedia(
     @GetOrgFromRequest() org: Organization,

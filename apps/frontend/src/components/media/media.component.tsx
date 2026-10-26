@@ -34,6 +34,7 @@ import { ReactSortable } from 'react-sortablejs';
 import { MediaComponentInner } from '@gitroom/frontend/components/launches/helpers/media.settings.component';
 import { AiVideo } from '@gitroom/frontend/components/launches/ai.video';
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import copy from 'copy-to-clipboard';
 import { ThirdPartyMediaLibrary } from '@gitroom/frontend/components/third-parties/third-party.media-library';
 import { Dashboard } from '@uppy/react';
 import {
@@ -89,6 +90,230 @@ const MediaPlayback: FC<{ path: string; video: boolean }> = ({ path, video }) =>
     );
   }
   return <img className={previewMediaClass} src={path} alt="" />;
+};
+
+type MediaDetails = {
+  publicUrl: string;
+  filename: string;
+  localPath: string | null;
+  fileSize: number;
+  type: string;
+  duration: number | null;
+  createdAt: string;
+  updatedAt: string;
+  alt: string | null;
+  status: string;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  hasAudio: boolean | null;
+  format: string | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  bitRate: number | null;
+  tags: { key: string; value: string }[];
+};
+
+const formatBytes = (bytes?: number | null) => {
+  if (!bytes) {
+    return '';
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatClock = (seconds?: number | null) => {
+  if (!seconds || seconds <= 0) {
+    return '';
+  }
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
+};
+
+const useMediaDetails = (id: string, enabled: boolean) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    const response = await fetch(`/media/${id}/details`);
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as MediaDetails;
+  }, [fetch, id]);
+  return useSWR<MediaDetails | null>(
+    enabled ? `/media/${id}/details` : null,
+    load
+  );
+};
+
+const MediaInfoRow: FC<{
+  label: string;
+  value?: string | null;
+  onCopy?: () => void;
+  copyLabel?: string;
+}> = ({ label, value, onCopy, copyLabel }) => {
+  if (!value) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-[4px]">
+      <div className="text-[12px] uppercase opacity-60">{label}</div>
+      <div className="flex items-start gap-[8px]">
+        <div className="flex-1 min-w-0 break-all">{value}</div>
+        {onCopy && (
+          <button
+            type="button"
+            className="shrink-0 cursor-pointer rounded-[6px] border border-newBorder px-[8px] h-[28px] text-[12px]"
+            onClick={onCopy}
+          >
+            {copyLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const MediaPreview: FC<{
+  id: string;
+  path: string;
+  filename: string;
+  video: boolean;
+}> = ({ id, path, filename, video }) => {
+  const t = useT();
+  const toaster = useToaster();
+  const [tab, setTab] = useState<'preview' | 'info'>('preview');
+  const { data, isLoading } = useMediaDetails(id, tab === 'info');
+  const copyValue = (value: string) => {
+    copy(value);
+    toaster.show(t('copied_to_clipboard', 'Copied to clipboard'), 'success');
+  };
+  const tabs = [
+    { id: 'preview' as const, label: t('preview', 'Preview') },
+    { id: 'info' as const, label: t('info', 'Info') },
+  ];
+  const dimensions =
+    data?.width && data?.height ? `${data.width} × ${data.height}` : '';
+
+  return (
+    <div className="flex flex-col gap-[12px] text-textColor max-w-[calc(100vw-80px)]">
+      <div className="flex gap-[16px] border-b border-newBorder">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={clsx(
+              'cursor-pointer h-[36px] text-[14px] font-[600]',
+              tab === item.id
+                ? 'border-b-2 border-[#612BD3] text-textColor'
+                : 'text-textItemBlur'
+            )}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'preview' ? (
+        <MediaPlayback path={path} video={video} />
+      ) : (
+        <div className="flex flex-col gap-[14px] min-w-[min(640px,calc(100vw-120px))] max-h-[calc(100dvh-220px)] overflow-auto pe-[4px] text-[13px]">
+          <MediaInfoRow
+            label={t('public_url', 'Public URL')}
+            value={data?.publicUrl || path}
+            copyLabel={t('copy', 'Copy')}
+            onCopy={() => copyValue(data?.publicUrl || path)}
+          />
+          <MediaInfoRow
+            label={t('filename', 'Filename')}
+            value={data?.filename || filename}
+            copyLabel={t('copy', 'Copy')}
+            onCopy={() => copyValue(data?.filename || filename)}
+          />
+          <MediaInfoRow
+            label={t('local_path', 'Local path')}
+            value={data?.localPath}
+            copyLabel={t('copy', 'Copy')}
+            onCopy={
+              data?.localPath ? () => copyValue(data.localPath!) : undefined
+            }
+          />
+          {isLoading && (
+            <div className="opacity-60">
+              {t('reading_file', 'Reading file…')}
+            </div>
+          )}
+          <MediaInfoRow label={t('type', 'Type')} value={data?.type} />
+          <MediaInfoRow
+            label={t('file_size', 'File size')}
+            value={formatBytes(data?.fileSize)}
+          />
+          <MediaInfoRow
+            label={t('dimensions', 'Dimensions')}
+            value={dimensions}
+          />
+          <MediaInfoRow
+            label={t('duration', 'Duration')}
+            value={formatClock(data?.duration)}
+          />
+          <MediaInfoRow label={t('format', 'Format')} value={data?.format} />
+          <MediaInfoRow
+            label={t('video_codec', 'Video codec')}
+            value={data?.videoCodec}
+          />
+          <MediaInfoRow
+            label={t('audio_codec', 'Audio codec')}
+            value={data?.audioCodec}
+          />
+          <MediaInfoRow
+            label={t('frame_rate', 'Frame rate')}
+            value={
+              data?.fps && data.duration && data.duration > 0.5
+                ? `${Math.round(data.fps)} fps`
+                : ''
+            }
+          />
+          <MediaInfoRow
+            label={t('bitrate', 'Bitrate')}
+            value={
+              data?.bitRate
+                ? `${Math.round(data.bitRate / 1000)} kbps`
+                : ''
+            }
+          />
+          <MediaInfoRow
+            label={t('audio', 'Audio')}
+            value={
+              !data || data.type === 'image' || data.hasAudio == null
+                ? ''
+                : data.hasAudio
+                  ? t('yes', 'Yes')
+                  : t('no', 'No')
+            }
+          />
+          <MediaInfoRow label={t('alt_text', 'Alt text')} value={data?.alt} />
+          <MediaInfoRow label={t('status', 'Status')} value={data?.status} />
+          <MediaInfoRow
+            label={t('created', 'Created')}
+            value={
+              data?.createdAt
+                ? new Date(data.createdAt).toLocaleString()
+                : ''
+            }
+          />
+          {(data?.tags || []).map((tag) => (
+            <MediaInfoRow key={tag.key} label={tag.key} value={tag.value} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const readDuration = (url: string) =>
@@ -644,8 +869,10 @@ export const MediaBox: FC<{
         size: 'fit-content',
         maxSize: 'calc(100vw - 48px)',
         children: (
-          <MediaPlayback
+          <MediaPreview
+            id={media.id}
             path={mediaDirectory.set(media.path)}
+            filename={media.originalName || media.name}
             video={isVideoFile(media.path)}
           />
         ),

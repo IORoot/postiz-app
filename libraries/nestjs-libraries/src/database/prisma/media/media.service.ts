@@ -36,6 +36,7 @@ import {
 import {
   localMediaPath,
   probeFile,
+  probeMediaInfo,
   renderToStorage,
 } from '@gitroom/nestjs-libraries/videos/video.render';
 import { randomBytes } from 'crypto';
@@ -367,6 +368,39 @@ export class MediaService {
     }
 
     return media;
+  }
+
+  // What API and MCP callers see: a failed adjustment of a file the
+  // platforms accept as-is is not a failed upload, the original stays in
+  // place and is what gets published
+  toUploadStatus(media: {
+    id: string;
+    name: string;
+    path: string;
+    status: string;
+  }) {
+    if (media.status !== 'failed') {
+      return { id: media.id, path: media.path, status: media.status };
+    }
+
+    return USABLE_AS_IS.has(extname(media.name).toLowerCase())
+      ? {
+          id: media.id,
+          path: media.path,
+          status: 'ready',
+          warning:
+            'Adjustment failed, the original file was kept and will be used for publishing',
+        }
+      : {
+          id: media.id,
+          path: media.path,
+          status: 'failed',
+          error: 'Processing failed and the original file cannot be used',
+        };
+  }
+
+  async getMediaUploadStatus(org: string, id: string) {
+    return this.toUploadStatus(await this.getMediaStatus(org, id));
   }
 
   // The normalized file overwrites the original in place; only a container
@@ -748,6 +782,44 @@ export class MediaService {
     }
 
     return functionToCall(body);
+  }
+
+  async getMediaDetails(org: string, id: string) {
+    const media = await this._mediaRepository.getMediaDetails(org, id);
+    if (!media?.path) {
+      throw new HttpException('Media not found', 404);
+    }
+    const localPath = localMediaPath(media.path);
+    const storedLocally = localPath !== media.path;
+    let file: Awaited<ReturnType<typeof probeMediaInfo>> | null = null;
+    if (storedLocally) {
+      try {
+        file = await probeMediaInfo(localPath);
+      } catch {
+        file = null;
+      }
+    }
+    return {
+      publicUrl: media.path,
+      filename: media.originalName || media.name,
+      localPath: storedLocally ? localPath : null,
+      fileSize: media.fileSize,
+      type: media.type,
+      duration: file?.duration || media.duration,
+      createdAt: media.createdAt,
+      updatedAt: media.updatedAt,
+      alt: media.alt,
+      status: media.status,
+      width: file?.width || null,
+      height: file?.height || null,
+      fps: file?.fps || null,
+      hasAudio: file ? file.hasAudio : null,
+      format: file?.format || null,
+      videoCodec: file?.videoCodec || null,
+      audioCodec: file?.audioCodec || null,
+      bitRate: file?.bitRate || null,
+      tags: file?.tags || [],
+    };
   }
 
   async probeMedia(org: string, id: string) {
