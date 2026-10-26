@@ -189,7 +189,7 @@ export class MediaService {
   // Streams the remote body straight into storage: only the sniffing prefix
   // and a few upload parts are ever in memory, so a 1 GB video does not cost
   // 1 GB of heap
-  async uploadFromUrl(org: string, url: string) {
+  async uploadFromUrl(org: string, url: string, adjust?: boolean) {
     let response: globalThis.Response;
     try {
       response = await fetch(url, {
@@ -220,7 +220,9 @@ export class MediaService {
       response.body,
       declaredSize
     );
-    return this.saveFile(org, uploaded.originalname, uploaded.path);
+    return adjust
+      ? this.saveUploadedFile(org, uploaded.originalname, uploaded.path)
+      : this.saveFile(org, uploaded.originalname, uploaded.path);
   }
 
   saveFile(
@@ -336,15 +338,16 @@ export class MediaService {
     sessionId: string,
     fileName: string,
     filePath: string,
-    originalName?: string
+    originalName?: string,
+    adjust?: boolean
   ) {
     await this.checkUploadSession(org, sessionId);
-    const media = await this.saveUploadedFile(
-      org,
-      fileName,
-      filePath,
-      originalName
-    );
+    // The upload widget passes adjust explicitly. Callers that omit it keep
+    // the previous behavior and still run the normalizer.
+    const media =
+      adjust === false
+        ? await this.saveFile(org, fileName, filePath, originalName)
+        : await this.saveUploadedFile(org, fileName, filePath, originalName);
     // a list, so parallel uploads of the same session can't overwrite each other
     await ioRedis.rpush(`uploadSessionMedia:${sessionId}`, media.id);
     await ioRedis.expire(`uploadSessionMedia:${sessionId}`, 3600);
