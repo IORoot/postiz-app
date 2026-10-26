@@ -55,7 +55,7 @@ const rate = (value?: string) => {
   return fps > 0 && fps < 1000 ? fps : 30;
 };
 
-export const probeFile = async (path: string): Promise<SourceProbe> => {
+const readFfprobe = (path: string) => {
   const args = [
     '-v',
     'error',
@@ -68,7 +68,7 @@ export const probeFile = async (path: string): Promise<SourceProbe> => {
   const child = spawn('ffprobe', args, { stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   let err = '';
-  const result = await new Promise<string>((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     child.stdout.on('data', (chunk) => {
       out += chunk.toString();
     });
@@ -90,17 +90,65 @@ export const probeFile = async (path: string): Promise<SourceProbe> => {
       }
     });
   });
-  const parsed = JSON.parse(result);
-  const video = (parsed.streams || []).find((stream: any) => stream.codec_type === 'video');
-  const audio = (parsed.streams || []).find((stream: any) => stream.codec_type === 'audio');
-  const duration = Number(video?.duration || parsed.format?.duration || 0);
+};
+
+export interface MediaFileInfo {
+  path: string;
+  width: number;
+  height: number;
+  duration: number;
+  fps: number;
+  hasAudio: boolean;
+  format: string;
+  videoCodec: string;
+  audioCodec: string;
+  bitRate: number;
+  tags: { key: string; value: string }[];
+}
+
+export const probeMediaInfo = async (path: string): Promise<MediaFileInfo> => {
+  const parsed = JSON.parse(await readFfprobe(path));
+  const video = (parsed.streams || []).find(
+    (stream: any) => stream.codec_type === 'video'
+  );
+  const audio = (parsed.streams || []).find(
+    (stream: any) => stream.codec_type === 'audio'
+  );
+  const rawTags = parsed.format?.tags;
+  const tags =
+    rawTags && typeof rawTags === 'object'
+      ? Object.entries(rawTags)
+          .filter(
+            (entry): entry is [string, string] =>
+              typeof entry[1] === 'string' && entry[1].length > 0 && entry[1].length < 300
+          )
+          .slice(0, 12)
+          .map(([key, value]) => ({ key, value }))
+      : [];
   return {
     path,
     width: Number(video?.width || 0),
     height: Number(video?.height || 0),
-    duration,
+    duration: Number(video?.duration || parsed.format?.duration || 0),
     fps: rate(video?.r_frame_rate || video?.avg_frame_rate),
     hasAudio: !!audio,
+    format: String(parsed.format?.format_long_name || parsed.format?.format_name || ''),
+    videoCodec: String(video?.codec_name || ''),
+    audioCodec: String(audio?.codec_name || ''),
+    bitRate: Number(parsed.format?.bit_rate || 0),
+    tags,
+  };
+};
+
+export const probeFile = async (path: string): Promise<SourceProbe> => {
+  const info = await probeMediaInfo(path);
+  return {
+    path: info.path,
+    width: info.width,
+    height: info.height,
+    duration: info.duration,
+    fps: info.fps,
+    hasAudio: info.hasAudio,
   };
 };
 

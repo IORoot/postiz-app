@@ -21,8 +21,6 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    "**/*.js",
-    "**/*.jsx",
     "../../apps/frontend/.next/types/**/*.ts",
     "../../dist/apps/frontend/.next/types/**/*.ts",
     "next-env.d.ts",
@@ -32,6 +30,10 @@
     "node_modules",
     "jest.config.ts",
     "src/**/*.spec.ts",
-    "src/**/*.test.ts"
+    "src/**/*.test.ts",
+    ".next/cache",
+    ".next/server",
+    ".next/static",
+    ".next/dev"
   ]
 }

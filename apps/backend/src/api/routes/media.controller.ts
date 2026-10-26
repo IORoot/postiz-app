@@ -25,6 +25,8 @@ import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/s
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { SaveMediaInformationDto } from '@gitroom/nestjs-libraries/dtos/media/save.media.information.dto';
 import { BulkDeleteMediaDto } from '@gitroom/nestjs-libraries/dtos/media/bulk.delete.media.dto';
+import { BulkMoveMediaDto } from '@gitroom/nestjs-libraries/dtos/media/bulk.move.media.dto';
+import { SaveMediaDurationsDto } from '@gitroom/nestjs-libraries/dtos/media/save.media.durations.dto';
 import { VideoDto } from '@gitroom/nestjs-libraries/dtos/videos/video.dto';
 import { VideoFunctionDto } from '@gitroom/nestjs-libraries/dtos/videos/video.function.dto';
 import { VIDEO_EDIT_MAX_OVERLAYS } from '@gitroom/nestjs-libraries/videos/video.edit';
@@ -52,6 +54,22 @@ export class MediaController {
     @Body() body: BulkDeleteMediaDto
   ) {
     return this._mediaService.bulkDeleteMedia(org.id, body);
+  }
+
+  @Post('/bulk/move')
+  bulkMoveMedia(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: BulkMoveMediaDto
+  ) {
+    return this._mediaService.bulkMoveMedia(org.id, body);
+  }
+
+  @Post('/duration')
+  saveDurations(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: SaveMediaDurationsDto
+  ) {
+    return this._mediaService.saveDurations(org.id, body);
   }
 
   @Post('/generate-video')
@@ -246,6 +264,23 @@ export class MediaController {
     res.status(200).json({ ...upload, saved: saveFile });
   }
 
+  @Get('/missing-duration')
+  listMissingDuration(
+    @GetOrgFromRequest() org: Organization,
+    @Query('search') search?: string,
+    @Query('folderId') folderId?: string
+  ) {
+    return this._mediaService.listMissingDuration(org.id, search, folderId);
+  }
+
+  @Get('/:id/details')
+  getMediaDetails(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._mediaService.getMediaDetails(org.id, id);
+  }
+
   @Get('/:id/probe')
   probeMedia(
     @GetOrgFromRequest() org: Organization,
@@ -268,8 +303,17 @@ export class MediaController {
     @Query('page') page: number,
     @Query('search') search?: string,
     @Query('folderId') folderId?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
   ) {
-    return this._mediaService.getMedia(org.id, page, search, folderId);
+    return this._mediaService.getMedia(
+      org.id,
+      page,
+      search,
+      folderId,
+      sort,
+      dir
+    );
   }
 
   @Get('/video-options')

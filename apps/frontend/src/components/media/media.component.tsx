@@ -34,6 +34,7 @@ import { ReactSortable } from 'react-sortablejs';
 import { MediaComponentInner } from '@gitroom/frontend/components/launches/helpers/media.settings.component';
 import { AiVideo } from '@gitroom/frontend/components/launches/ai.video';
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import copy from 'copy-to-clipboard';
 import { ThirdPartyMediaLibrary } from '@gitroom/frontend/components/third-parties/third-party.media-library';
 import { Dashboard } from '@uppy/react';
 import {
@@ -69,6 +70,300 @@ const isAudioFile = (path?: string | null) =>
   hasExtension(path, 'mp3') ||
   hasExtension(path, 'm4a') ||
   hasExtension(path, 'wav');
+
+type MediaSort = 'createdAt' | 'name' | 'duration';
+type MediaDir = 'asc' | 'desc';
+
+const previewMediaClass =
+  'block w-auto h-auto max-w-[calc(100vw-140px)] max-h-[calc(100dvh-220px)] object-contain';
+
+const MediaPlayback: FC<{ path: string; video: boolean }> = ({ path, video }) => {
+  if (video) {
+    return (
+      <video
+        className={previewMediaClass}
+        src={path}
+        controls
+        autoPlay
+        playsInline
+      />
+    );
+  }
+  return <img className={previewMediaClass} src={path} alt="" />;
+};
+
+type MediaDetails = {
+  publicUrl: string;
+  filename: string;
+  localPath: string | null;
+  fileSize: number;
+  type: string;
+  duration: number | null;
+  createdAt: string;
+  updatedAt: string;
+  alt: string | null;
+  status: string;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  hasAudio: boolean | null;
+  format: string | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  bitRate: number | null;
+  tags: { key: string; value: string }[];
+};
+
+const formatBytes = (bytes?: number | null) => {
+  if (!bytes) {
+    return '';
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatClock = (seconds?: number | null) => {
+  if (!seconds || seconds <= 0) {
+    return '';
+  }
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
+};
+
+const useMediaDetails = (id: string, enabled: boolean) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    const response = await fetch(`/media/${id}/details`);
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as MediaDetails;
+  }, [fetch, id]);
+  return useSWR<MediaDetails | null>(
+    enabled ? `/media/${id}/details` : null,
+    load
+  );
+};
+
+const MediaInfoRow: FC<{
+  label: string;
+  value?: string | null;
+  onCopy?: () => void;
+  copyLabel?: string;
+}> = ({ label, value, onCopy, copyLabel }) => {
+  if (!value) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-[4px]">
+      <div className="text-[12px] uppercase opacity-60">{label}</div>
+      <div className="flex items-start gap-[8px]">
+        <div className="flex-1 min-w-0 break-all">{value}</div>
+        {onCopy && (
+          <button
+            type="button"
+            className="shrink-0 cursor-pointer rounded-[6px] border border-newBorder px-[8px] h-[28px] text-[12px]"
+            onClick={onCopy}
+          >
+            {copyLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const MediaPreview: FC<{
+  id: string;
+  path: string;
+  filename: string;
+  video: boolean;
+}> = ({ id, path, filename, video }) => {
+  const t = useT();
+  const toaster = useToaster();
+  const [tab, setTab] = useState<'preview' | 'info'>('preview');
+  const { data, isLoading } = useMediaDetails(id, tab === 'info');
+  const copyValue = (value: string) => {
+    copy(value);
+    toaster.show(t('copied_to_clipboard', 'Copied to clipboard'), 'success');
+  };
+  const tabs = [
+    { id: 'preview' as const, label: t('preview', 'Preview') },
+    { id: 'info' as const, label: t('info', 'Info') },
+  ];
+  const dimensions =
+    data?.width && data?.height ? `${data.width} × ${data.height}` : '';
+
+  return (
+    <div className="flex flex-col gap-[12px] text-textColor max-w-[calc(100vw-80px)]">
+      <div className="flex gap-[16px] border-b border-newBorder">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={clsx(
+              'cursor-pointer h-[36px] text-[14px] font-[600]',
+              tab === item.id
+                ? 'border-b-2 border-[#612BD3] text-textColor'
+                : 'text-textItemBlur'
+            )}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'preview' ? (
+        <MediaPlayback path={path} video={video} />
+      ) : (
+        <div className="flex flex-col gap-[14px] min-w-[min(640px,calc(100vw-120px))] max-h-[calc(100dvh-220px)] overflow-auto pe-[4px] text-[13px]">
+          <MediaInfoRow
+            label={t('public_url', 'Public URL')}
+            value={data?.publicUrl || path}
+            copyLabel={t('copy', 'Copy')}
+            onCopy={() => copyValue(data?.publicUrl || path)}
+          />
+          <MediaInfoRow
+            label={t('filename', 'Filename')}
+            value={data?.filename || filename}
+            copyLabel={t('copy', 'Copy')}
+            onCopy={() => copyValue(data?.filename || filename)}
+          />
+          <MediaInfoRow
+            label={t('local_path', 'Local path')}
+            value={data?.localPath}
+            copyLabel={t('copy', 'Copy')}
+            onCopy={
+              data?.localPath ? () => copyValue(data.localPath!) : undefined
+            }
+          />
+          {isLoading && (
+            <div className="opacity-60">
+              {t('reading_file', 'Reading file…')}
+            </div>
+          )}
+          <MediaInfoRow label={t('type', 'Type')} value={data?.type} />
+          <MediaInfoRow
+            label={t('file_size', 'File size')}
+            value={formatBytes(data?.fileSize)}
+          />
+          <MediaInfoRow
+            label={t('dimensions', 'Dimensions')}
+            value={dimensions}
+          />
+          <MediaInfoRow
+            label={t('duration', 'Duration')}
+            value={formatClock(data?.duration)}
+          />
+          <MediaInfoRow label={t('format', 'Format')} value={data?.format} />
+          <MediaInfoRow
+            label={t('video_codec', 'Video codec')}
+            value={data?.videoCodec}
+          />
+          <MediaInfoRow
+            label={t('audio_codec', 'Audio codec')}
+            value={data?.audioCodec}
+          />
+          <MediaInfoRow
+            label={t('frame_rate', 'Frame rate')}
+            value={
+              data?.fps && data.duration && data.duration > 0.5
+                ? `${Math.round(data.fps)} fps`
+                : ''
+            }
+          />
+          <MediaInfoRow
+            label={t('bitrate', 'Bitrate')}
+            value={
+              data?.bitRate
+                ? `${Math.round(data.bitRate / 1000)} kbps`
+                : ''
+            }
+          />
+          <MediaInfoRow
+            label={t('audio', 'Audio')}
+            value={
+              !data || data.type === 'image' || data.hasAudio == null
+                ? ''
+                : data.hasAudio
+                  ? t('yes', 'Yes')
+                  : t('no', 'No')
+            }
+          />
+          <MediaInfoRow label={t('alt_text', 'Alt text')} value={data?.alt} />
+          <MediaInfoRow label={t('status', 'Status')} value={data?.status} />
+          <MediaInfoRow
+            label={t('created', 'Created')}
+            value={
+              data?.createdAt
+                ? new Date(data.createdAt).toLocaleString()
+                : ''
+            }
+          />
+          {(data?.tags || []).map((tag) => (
+            <MediaInfoRow key={tag.key} label={tag.key} value={tag.value} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const readDuration = (url: string) =>
+  new Promise<number | null>((resolve) => {
+    const media = isAudioFile(url)
+      ? document.createElement('audio')
+      : document.createElement('video');
+    media.preload = 'metadata';
+    let settled = false;
+    const finish = (value: number | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.clearTimeout(timer);
+      media.onloadedmetadata = null;
+      media.onerror = null;
+      media.removeAttribute('src');
+      media.load();
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => finish(null), 12000);
+    media.onloadedmetadata = () => {
+      const seconds = media.duration;
+      finish(Number.isFinite(seconds) && seconds > 0 ? seconds : null);
+    };
+    media.onerror = () => finish(null);
+    media.src = url;
+  });
+
+const readDurations = async (rows: { id: string; path: string }[]) => {
+  const found: { id: string; duration: number }[] = [];
+  let index = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, rows.length) }, async () => {
+      while (index < rows.length) {
+        const row = rows[index++];
+        const duration = await readDuration(row.path);
+        if (duration) {
+          found.push({
+            id: row.id,
+            duration: Math.round(duration * 1000) / 1000,
+          });
+        }
+      }
+    })
+  );
+  return found;
+};
+
 const showModalEmitter = new EventEmitter();
 // on phones the media library takes the whole screen
 export const mediaLibrarySize = () =>
@@ -263,6 +558,9 @@ export const MediaBox: FC<{
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 300);
+  const [sort, setSort] = useState<MediaSort>('createdAt');
+  const [dir, setDir] = useState<MediaDir>('desc');
+  const [measuring, setMeasuring] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string | undefined>();
   const fetch = useFetch();
   const modals = useModals();
@@ -273,7 +571,7 @@ export const MediaBox: FC<{
       setSelected([]);
       setWholeLibrary(false);
     }
-  }, [debouncedSearch, selectedFolder]);
+  }, [debouncedSearch, selectedFolder, sort, dir]);
   const loadMedia = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page + 1) });
     if (debouncedSearch.trim()) {
@@ -282,10 +580,12 @@ export const MediaBox: FC<{
     if (selectedFolder) {
       params.set('folderId', selectedFolder);
     }
+    params.set('sort', sort);
+    params.set('dir', dir);
     return (await fetch(`/media?${params.toString()}`)).json();
-  }, [page, debouncedSearch, selectedFolder]);
+  }, [page, debouncedSearch, selectedFolder, sort, dir]);
   const { data, mutate, isLoading } = useSWR(
-    `get-media-${page}-${debouncedSearch}-${selectedFolder || ''}`,
+    `get-media-${page}-${debouncedSearch}-${selectedFolder || ''}-${sort}-${dir}`,
     loadMedia,
     {
       refreshInterval: (latest: { results?: { status?: string }[] }) =>
@@ -302,6 +602,81 @@ export const MediaBox: FC<{
     },
     [mutate]
   );
+  const reportedDuration = useRef(new Set<string>());
+  const refreshMedia = useRef(mutate);
+  refreshMedia.current = mutate;
+  const rememberDuration = useCallback(
+    (id: string, seconds: number) => {
+      if (reportedDuration.current.has(id)) {
+        return;
+      }
+      reportedDuration.current.add(id);
+      fetch('/media/duration', {
+        method: 'POST',
+        body: JSON.stringify({
+          items: [{ id, duration: Math.round(seconds * 1000) / 1000 }],
+        }),
+      });
+    },
+    [fetch]
+  );
+  useEffect(() => {
+    if (sort !== 'duration') {
+      return;
+    }
+    let cancel = false;
+    const run = async () => {
+      setMeasuring(true);
+      let savedAny = false;
+      try {
+        while (!cancel) {
+          const params = new URLSearchParams();
+          if (debouncedSearch.trim()) {
+            params.set('search', debouncedSearch.trim());
+          }
+          if (selectedFolder) {
+            params.set('folderId', selectedFolder);
+          }
+          const response = await fetch(
+            `/media/missing-duration?${params.toString()}`
+          );
+          if (!response.ok || cancel) {
+            break;
+          }
+          const rows: { id: string; path: string }[] = await response.json();
+          if (!Array.isArray(rows) || !rows.length) {
+            break;
+          }
+          const measured = await readDurations(rows);
+          if (cancel || !measured.length) {
+            break;
+          }
+          const saved = await fetch('/media/duration', {
+            method: 'POST',
+            body: JSON.stringify({ items: measured }),
+          });
+          if (!saved.ok) {
+            break;
+          }
+          savedAny = true;
+          if (rows.length < 80) {
+            break;
+          }
+        }
+        if (!cancel && savedAny) {
+          await refreshMedia.current();
+        }
+      } finally {
+        if (!cancel) {
+          setMeasuring(false);
+        }
+      }
+    };
+    run();
+    return () => {
+      cancel = true;
+    };
+  }, [sort, debouncedSearch, selectedFolder, fetch]);
   const [selected, setSelected] = useState<any[]>([]);
   // the standalone library selects only to delete in bulk
   const [selectMode, setSelectMode] = useState(false);
@@ -490,28 +865,20 @@ export const MediaBox: FC<{
       e.stopPropagation();
       modals.openModal({
         title: '',
-        top: 10,
+        top: 24,
+        size: 'fit-content',
+        maxSize: 'calc(100vw - 48px)',
         children: (
-          <div className="w-full h-full p-[50px]">
-            {isVideoFile(media.path) ? (
-              <VideoFrame
-                autoplay={true}
-                url={mediaDirectory.set(media.path)}
-              />
-            ) : (
-              <img
-                width="100%"
-                height="100%"
-                className="w-full h-full max-h-[100%] max-w-[100%] object-cover"
-                src={mediaDirectory.set(media.path)}
-                alt="media"
-              />
-            )}
-          </div>
+          <MediaPreview
+            id={media.id}
+            path={mediaDirectory.set(media.path)}
+            filename={media.originalName || media.name}
+            video={isVideoFile(media.path)}
+          />
         ),
       });
     },
-    [],
+    [mediaDirectory],
   );
 
   const editImage = useCallback(
@@ -682,6 +1049,45 @@ export const MediaBox: FC<{
               className="w-full h-[44px] px-[14px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none focus:border-[#612BD3]"
             />
           </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as MediaSort)}
+            className="h-[44px] px-[10px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none"
+          >
+            <option value="createdAt">{t('sort_date', 'Date')}</option>
+            <option value="name">{t('sort_file_name', 'File name')}</option>
+            <option value="duration">{t('sort_duration', 'Duration')}</option>
+          </select>
+          <select
+            value={dir}
+            onChange={(e) => setDir(e.target.value as MediaDir)}
+            title={
+              sort === 'duration'
+                ? t(
+                    'duration_sort_hint',
+                    'Pictures have no length, so they stay at the end'
+                  )
+                : undefined
+            }
+            className="h-[44px] px-[10px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none"
+          >
+            {sort === 'name' ? (
+              <>
+                <option value="asc">{t('sort_name_asc', 'A–Z')}</option>
+                <option value="desc">{t('sort_name_desc', 'Z–A')}</option>
+              </>
+            ) : sort === 'duration' ? (
+              <>
+                <option value="asc">{t('sort_duration_asc', 'Shortest')}</option>
+                <option value="desc">{t('sort_duration_desc', 'Longest')}</option>
+              </>
+            ) : (
+              <>
+                <option value="desc">{t('sort_date_desc', 'Newest')}</option>
+                <option value="asc">{t('sort_date_asc', 'Oldest')}</option>
+              </>
+            )}
+          </select>
           <input
             type="file"
             ref={uploaderRef}
@@ -724,6 +1130,11 @@ export const MediaBox: FC<{
             </div>
           )}
         </div>
+        {measuring && (
+          <div className="mt-[8px] text-[13px] text-textColor/70">
+            {t('reading_durations', 'Reading video lengths…')}
+          </div>
+        )}
         {standalone && selectMode && (
           <div className="mt-[12px]">
             <MediaBulkActionsBar
@@ -943,6 +1354,11 @@ export const MediaBox: FC<{
                         <VideoFrame
                           url={mediaDirectory.set(media.path)}
                           showDuration
+                          onDuration={
+                            media.duration == null
+                              ? (seconds) => rememberDuration(media.id, seconds)
+                              : undefined
+                          }
                         />
                       ) : isAudioFile(media.path) ? (
                         <div className="w-full h-full flex items-center justify-center text-center text-[12px] px-[8px]">
