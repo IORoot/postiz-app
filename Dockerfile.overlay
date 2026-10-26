@@ -46,6 +46,8 @@ COPY apps/backend/src/api/routes/posts.controller.ts \
      /app/apps/backend/src/api/routes/posts.controller.ts
 COPY apps/backend/src/api/routes/media.controller.ts \
      /app/apps/backend/src/api/routes/media.controller.ts
+COPY apps/backend/src/api/routes/copilot.controller.ts \
+     /app/apps/backend/src/api/routes/copilot.controller.ts
 COPY apps/frontend/src/components/webhooks/webhooks.tsx \
      /app/apps/frontend/src/components/webhooks/webhooks.tsx
 COPY apps/frontend/src/components/launches/bulk.actions.tsx \
