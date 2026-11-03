@@ -3,6 +3,8 @@ import { AuthController } from '@gitroom/backend/api/routes/auth.controller';
 import { AuthService } from '@gitroom/backend/services/auth/auth.service';
 import { UsersController } from '@gitroom/backend/api/routes/users.controller';
 import { AuthMiddleware } from '@gitroom/backend/services/auth/auth.middleware';
+import { ApiKeyRouteMiddleware } from '@gitroom/backend/services/auth/api.key.route.middleware';
+import { PublicAuthMiddleware } from '@gitroom/backend/services/auth/public.auth.middleware';
 import { StripeService } from '@gitroom/nestjs-libraries/services/stripe.service';
 import { PaymentController } from '@gitroom/backend/api/routes/payment.controller';
 import { PaymentService } from '@gitroom/nestjs-libraries/services/payment/payment.service';
@@ -113,6 +115,8 @@ const authenticatedController = [
     OpenaiService,
     ExtractContentService,
     AuthMiddleware,
+    PublicAuthMiddleware,
+    ApiKeyRouteMiddleware,
     UploadWidgetAuthMiddleware,
     PoliciesGuard,
     PermissionsService,
@@ -134,6 +138,9 @@ const authenticatedController = [
 })
 export class ApiModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(ApiKeyRouteMiddleware)
+      .forRoutes(MediaController, PipelinesController);
     consumer.apply(AuthMiddleware).forRoutes(...authenticatedController);
     consumer.apply(UploadWidgetAuthMiddleware).forRoutes(MediaWidgetController);
     consumer

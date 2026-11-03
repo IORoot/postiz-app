@@ -8,7 +8,7 @@ services:
     container_name: postiz-postgres
     restart: always
     environment:
-      POSTGRES_PASSWORD: postiz-local-pwd
+      POSTGRES_PASSWORD: "${DEV_POSTGRES_PASSWORD:?set DEV_POSTGRES_PASSWORD in .env}"
       POSTGRES_USER: postiz-local
       POSTGRES_DB: postiz-db-local
       TEMPORAL_ADDRESS: "temporal:7233"
@@ -35,8 +35,8 @@ services:
     ports:
       - 8085:80
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: "${PGADMIN_DEFAULT_EMAIL:?set PGADMIN_DEFAULT_EMAIL in .env}"
+      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_DEFAULT_PASSWORD:?set PGADMIN_DEFAULT_PASSWORD in .env}"
     networks:
       - postiz-network
   postiz-redisinsight:
@@ -75,7 +75,7 @@ services:
     container_name: temporal-postgresql
     image: postgres:16
     environment:
-      POSTGRES_PASSWORD: temporal
+      POSTGRES_PASSWORD: "${TEMPORAL_POSTGRES_PASSWORD:?set TEMPORAL_POSTGRES_PASSWORD in .env}"
       POSTGRES_USER: temporal
     networks:
       - temporal-network
@@ -96,7 +96,7 @@ services:
       - DB=postgres12
       - DB_PORT=5432
       - POSTGRES_USER=temporal
-      - POSTGRES_PWD=temporal
+      - "POSTGRES_PWD=${TEMPORAL_POSTGRES_PASSWORD:?set TEMPORAL_POSTGRES_PASSWORD in .env}"
       - POSTGRES_SEEDS=temporal-postgresql
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
       - ENABLE_ES=true

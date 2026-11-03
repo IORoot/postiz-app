@@ -32,6 +32,12 @@ export class AuthMiddleware implements NestMiddleware {
     private _userService: UsersService
   ) {}
   async use(req: Request, res: Response, next: NextFunction) {
+    // Set by ApiKeyRouteMiddleware for the few routes that accept an API key.
+    // @ts-ignore
+    if (req.apiKeyAuthenticated) {
+      next();
+      return;
+    }
     const auth = req.headers.auth || req.cookies.auth;
     if (!auth) {
       throw new HttpForbiddenException();
