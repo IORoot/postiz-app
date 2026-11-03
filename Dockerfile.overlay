@@ -128,6 +128,10 @@ COPY libraries/nestjs-libraries/src/temporal/infinite.workflow.register.ts \
      /app/libraries/nestjs-libraries/src/temporal/infinite.workflow.register.ts
 COPY apps/backend/src/api/api.module.ts \
      /app/apps/backend/src/api/api.module.ts
+COPY apps/backend/src/services/auth/api.key.route.middleware.ts \
+     /app/apps/backend/src/services/auth/api.key.route.middleware.ts
+COPY apps/backend/src/services/auth/auth.middleware.ts \
+     /app/apps/backend/src/services/auth/auth.middleware.ts
 COPY apps/backend/src/api/routes/pipelines.controller.ts \
      /app/apps/backend/src/api/routes/pipelines.controller.ts
 COPY apps/orchestrator/src/app.module.ts \
