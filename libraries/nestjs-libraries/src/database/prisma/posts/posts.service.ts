@@ -85,6 +85,24 @@ export class PostsService {
     return this._postRepository.searchForMissingThreeHoursPosts();
   }
 
+  getPostState(id: string) {
+    return this._postRepository.getPostState(id);
+  }
+
+  updateResolvedRelease(
+    id: string,
+    orgId: string,
+    releaseId: string,
+    releaseURL: string
+  ) {
+    return this._postRepository.updateResolvedRelease(
+      id,
+      orgId,
+      releaseId,
+      releaseURL
+    );
+  }
+
   updatePost(id: string, postId: string, releaseURL: string) {
     return this._postRepository.updatePost(id, postId, releaseURL);
   }

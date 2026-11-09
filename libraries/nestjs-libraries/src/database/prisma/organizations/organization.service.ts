@@ -105,7 +105,13 @@ export class OrganizationService {
     const id = makeId(5);
     const url =
       process.env.FRONTEND_URL +
-      `/?org=${AuthService.signJWT({ ...body, orgId: org.id, timeLimit, id })}`;
+      `/?org=${AuthService.signJWT({
+        email: body.email,
+        role: body.role,
+        orgId: org.id,
+        timeLimit,
+        id,
+      })}`;
     if (body.sendEmail) {
       const inviter = user.name
         ? `${user.name} (${user.email})`
