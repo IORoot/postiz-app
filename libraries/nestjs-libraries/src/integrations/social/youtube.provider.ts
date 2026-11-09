@@ -44,13 +44,7 @@ const clientAndYoutube = () => {
       auth: newClient,
     });
 
-  const oauth2 = (newClient: OAuth2Client) =>
-    google.oauth2({
-      version: 'v2',
-      auth: newClient,
-    });
-
-  return { client, youtube, oauth2, youtubeAnalytics };
+  return { client, youtube, youtubeAnalytics };
 };
 
 @Rules('YouTube must have on video attachment, it cannot be empty')
@@ -61,8 +55,8 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
   isBetweenSteps = true;
   dto = YoutubeSettingsDto;
   scopes = [
-    'https://www.googleapis.com/auth/userinfo.profile',
-    'https://www.googleapis.com/auth/userinfo.email',
+    // userinfo.profile and userinfo.email stop Google from showing the
+    // Brand Account picker and the consent screen never redirects back
     'https://www.googleapis.com/auth/youtube',
     'https://www.googleapis.com/auth/youtube.force-ssl',
     'https://www.googleapis.com/auth/youtube.readonly',
@@ -273,25 +267,29 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
   }
 
   async refreshToken(refresh_token: string): Promise<AuthTokenDetails> {
-    const { client, oauth2 } = clientAndYoutube();
+    const { client, youtube } = clientAndYoutube();
     client.setCredentials({ refresh_token });
     const { credentials } = await client.refreshAccessToken();
-    const user = oauth2(client);
     const expiryDate = new Date(credentials.expiry_date!);
     const unixTimestamp =
       Math.floor(expiryDate.getTime() / 1000) -
       Math.floor(new Date().getTime() / 1000);
 
-    const { data } = await user.userinfo.get();
+    const channel = (
+      await youtube(client).channels.list({
+        part: ['snippet'],
+        mine: true,
+      })
+    ).data.items?.[0];
 
     return {
       accessToken: credentials.access_token!,
       expiresIn: unixTimestamp!,
       refreshToken: credentials.refresh_token ?? refresh_token,
-      id: data.id!,
-      name: data.name!,
-      picture: data?.picture || '',
-      username: '',
+      id: channel?.id || '',
+      name: channel?.snippet?.title || '',
+      picture: channel?.snippet?.thumbnails?.default?.url || '',
+      username: channel?.snippet?.customUrl || '',
     };
   }
 
@@ -301,7 +299,7 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     return {
       url: client.generateAuthUrl({
         access_type: 'offline',
-        prompt: 'consent',
+        prompt: 'consent select_account',
         state,
         redirect_uri: `${process.env.FRONTEND_URL}/integrations/social/youtube`,
         scope: this.scopes.slice(0),
@@ -316,14 +314,18 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     codeVerifier: string;
     refresh?: string;
   }) {
-    const { client, oauth2 } = clientAndYoutube();
+    const { client, youtube } = clientAndYoutube();
     const { tokens } = await client.getToken(params.code);
     client.setCredentials(tokens);
     const { scopes } = await client.getTokenInfo(tokens.access_token!);
     this.checkScopes(this.scopes, scopes);
 
-    const user = oauth2(client);
-    const { data } = await user.userinfo.get();
+    const channel = (
+      await youtube(client).channels.list({
+        part: ['snippet'],
+        mine: true,
+      })
+    ).data.items?.[0];
 
     const expiryDate = new Date(tokens.expiry_date!);
     const unixTimestamp =
@@ -334,10 +336,10 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       accessToken: tokens.access_token!,
       expiresIn: unixTimestamp,
       refreshToken: tokens.refresh_token!,
-      id: data.id!,
-      name: data.name!,
-      picture: data?.picture || '',
-      username: '',
+      id: channel?.id || '',
+      name: channel?.snippet?.title || '',
+      picture: channel?.snippet?.thumbnails?.default?.url || '',
+      username: channel?.snippet?.customUrl || '',
     };
   }
 
