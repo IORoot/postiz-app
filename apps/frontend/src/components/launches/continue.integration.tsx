@@ -7,10 +7,15 @@ import { Redirect } from '@gitroom/frontend/components/layout/redirect';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import { continueProviderList } from '@gitroom/frontend/components/new-launch/providers/continue-provider/list';
 import { IntegrationContext } from '@gitroom/frontend/components/launches/helpers/use.integration';
 import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
 import { useVariables } from '@gitroom/react/helpers/variable.context';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface TwoStepState {
   integrationId: string;
@@ -105,113 +110,124 @@ export const ContinueIntegration: FC<{
 
   useEffect(() => {
     (async () => {
-      const timezone = String(dayjs.tz().utcOffset());
-
-      // Try public endpoint first (handles both public and fallback scenarios)
-      let data = await fetch(`/integrations/social-connect/${provider}`, {
-        method: 'POST',
-        body: JSON.stringify({ ...modifiedParams, timezone }),
-      });
-
-      // If public endpoint fails with specific errors, try authenticated endpoint
-      if (data.status === HttpStatusCode.BadRequest) {
-        const errorData = await data.json().catch(() => ({}));
-        // "Invalid connection type" means this wasn't started as a public flow
-        if (
-          errorData.message?.includes('Invalid connection type') ||
-          errorData.message?.includes('Invalid or expired state')
-        ) {
-          data = await fetch(`/integrations/social-connect/${provider}`, {
-            method: 'POST',
-            body: JSON.stringify({ ...modifiedParams, timezone }),
-          });
-        }
-      }
-
-      if (data.status === HttpStatusCode.PreconditionFailed) {
-        const { returnURL } = await data.json().catch(() => ({}));
-        navigateOrShow(
-          `/launches?precondition=true`,
-          returnURL,
-          'Precondition failed'
+      try {
+        const timezone = String(
+          typeof dayjs.tz === 'function'
+            ? dayjs.tz().utcOffset()
+            : dayjs().utcOffset()
         );
-        return;
-      }
 
-      if (data.status === HttpStatusCode.NotAcceptable) {
-        const { msg, returnURL } = await data.json();
-        navigateOrShow(`/launches?msg=${msg}`, returnURL, msg);
-        return;
-      }
+        // Try public endpoint first (handles both public and fallback scenarios)
+        let data = await fetch(`/integrations/social-connect/${provider}`, {
+          method: 'POST',
+          body: JSON.stringify({ ...modifiedParams, timezone }),
+        });
 
-      if (
-        data.status !== HttpStatusCode.Ok &&
-        data.status !== HttpStatusCode.Created
-      ) {
-        const errorData = await data.json().catch(() => ({}));
+        // If public endpoint fails with specific errors, try authenticated endpoint
+        if (data.status === HttpStatusCode.BadRequest) {
+          const errorData = await data.json().catch(() => ({}));
+          // "Invalid connection type" means this wasn't started as a public flow
+          if (
+            errorData.message?.includes('Invalid connection type') ||
+            errorData.message?.includes('Invalid or expired state')
+          ) {
+            data = await fetch(`/integrations/social-connect/${provider}`, {
+              method: 'POST',
+              body: JSON.stringify({ ...modifiedParams, timezone }),
+            });
+          }
+        }
+
+        if (data.status === HttpStatusCode.PreconditionFailed) {
+          const { returnURL } = await data.json().catch(() => ({}));
+          navigateOrShow(
+            `/launches?precondition=true`,
+            returnURL,
+            'Precondition failed'
+          );
+          return;
+        }
+
+        if (data.status === HttpStatusCode.NotAcceptable) {
+          const { msg, returnURL } = await data.json();
+          navigateOrShow(`/launches?msg=${msg}`, returnURL, msg);
+          return;
+        }
+
+        if (
+          data.status !== HttpStatusCode.Ok &&
+          data.status !== HttpStatusCode.Created
+        ) {
+          const errorData = await data.json().catch(() => ({}));
+          setErrorMessage(
+            errorData.message || errorData.msg || 'Could not add provider'
+          );
+          setError(true);
+          return;
+        }
+
+        const {
+          inBetweenSteps,
+          id,
+          onboarding: resOnboarding,
+          pages,
+          returnURL,
+          extensionToken,
+        } = await data.json();
+        const onboarding = resOnboarding || searchParams.onboarding === 'true';
+
+        // Store refresh token in extension for background cookie refresh
+        if (
+          extensionToken &&
+          extensionId &&
+          typeof chrome !== 'undefined' &&
+          chrome?.runtime?.sendMessage
+        ) {
+          try {
+            chrome.runtime.sendMessage(
+              extensionId,
+              {
+                type: 'STORE_REFRESH_TOKEN',
+                provider,
+                integrationId: id,
+                jwt: extensionToken,
+                backendUrl,
+              },
+              () => {
+                if (chrome.runtime.lastError) {
+                  return;
+                }
+              }
+            );
+          } catch {
+            // Silently ignore — extension may not be available
+          }
+        }
+
+        // If it's a two-step provider, show the selection UI inline
+        if (inBetweenSteps && !searchParams.refresh) {
+          setTwoStepState({
+            integrationId: id,
+            onboarding,
+            pages: pages || [],
+            returnURL,
+          });
+          return;
+        }
+
+        navigateOrShow(
+          `/launches?added=${provider}&msg=Channel Updated${
+            onboarding ? '&onboarding=true' : ''
+          }`,
+          returnURL,
+          'Channel Updated'
+        );
+      } catch (err) {
         setErrorMessage(
-          errorData.message || errorData.msg || 'Could not add provider'
+          err instanceof Error ? err.message : 'Could not add provider'
         );
         setError(true);
-        return;
       }
-
-      const {
-        inBetweenSteps,
-        id,
-        onboarding: resOnboarding,
-        pages,
-        returnURL,
-        extensionToken,
-      } = await data.json();
-      const onboarding = resOnboarding || searchParams.onboarding === 'true';
-
-      // Store refresh token in extension for background cookie refresh
-      if (
-        extensionToken &&
-        extensionId &&
-        typeof chrome !== 'undefined' &&
-        chrome?.runtime?.sendMessage
-      ) {
-        try {
-          chrome.runtime.sendMessage(
-            extensionId,
-            {
-              type: 'STORE_REFRESH_TOKEN',
-              provider,
-              integrationId: id,
-              jwt: extensionToken,
-              backendUrl,
-            },
-            () => {
-              if (chrome.runtime.lastError) {
-                return;
-              }
-            }
-          );
-        } catch {
-          // Silently ignore — extension may not be available
-        }
-      }
-
-      // If it's a two-step provider, show the selection UI inline
-      if (inBetweenSteps && !searchParams.refresh) {
-        setTwoStepState({
-          integrationId: id,
-          onboarding,
-          pages: pages || [],
-          returnURL,
-        });
-        return;
-      }
-
-      navigateOrShow(
-        `/launches?added=${provider}&msg=Channel Updated${
-          onboarding ? '&onboarding=true' : ''
-        }`,
-        returnURL,
-        'Channel Updated'
-      );
     })();
   }, []);
 
