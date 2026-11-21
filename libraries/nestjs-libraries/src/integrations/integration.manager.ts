@@ -263,21 +263,6 @@ export class IntegrationManager {
   getAllowedSocialsIntegrations() {
     return socialIntegrationList.map((p) => p.identifier);
   }
-
-  // Providers that connect with a plain redirect, so a link is enough.
-  getLinkableSocialsIntegrations() {
-    return socialIntegrationList
-      .filter(
-        (p) =>
-          !this.isHiddenProvider(p.identifier) &&
-          !p.externalUrl &&
-          !p.customFields &&
-          !p.isWeb3 &&
-          !p.isChromeExtension
-      )
-      .map((p) => p.identifier);
-  }
-
   getSocialIntegration(integration: string): SocialProvider {
     return socialIntegrationList.find((i) => i.identifier === integration)!;
   }
