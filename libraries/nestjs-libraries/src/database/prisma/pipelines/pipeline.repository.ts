@@ -862,6 +862,20 @@ export class PipelineRepository {
     });
   }
 
+  getLiveQueueItem(
+    orgId: string,
+    where: { id: string } | { group: string }
+  ) {
+    return this._queueItem.model.pipelineQueueItem.findFirst({
+      where: {
+        ...where,
+        deletedAt: null,
+        pipeline: { organizationId: orgId, deletedAt: null },
+      },
+      select: { id: true, status: true },
+    });
+  }
+
   async deleteItem(orgId: string, itemId: string) {
     return this.withSerializableRetry(async (tx) => {
       const item = await tx.pipelineQueueItem.findFirst({
@@ -886,7 +900,7 @@ export class PipelineRepository {
       });
       return tx.pipelineQueueItem.update({
         where: { id: item.id },
-        data: { status: 'REMOVED', deletedAt },
+        data: { status: 'REMOVED', deletedAt, idempotencyKey: null },
       });
     });
   }
@@ -1072,6 +1086,57 @@ export class PipelineRepository {
           select: pipelinePostSelect,
         },
       },
+    });
+  }
+
+  getQueueItemForPublicRead(orgId: string, itemId: string) {
+    return this._queueItem.model.pipelineQueueItem.findFirst({
+      where: {
+        id: itemId,
+        pipeline: { organizationId: orgId, deletedAt: null },
+      },
+      select: {
+        id: true,
+        group: true,
+        status: true,
+        error: true,
+        pipelineId: true,
+        pipeline: {
+          select: {
+            active: true,
+            timezone: true,
+            scheduleSlots: {
+              select: { dayOfWeek: true, minuteOfDay: true },
+            },
+          },
+        },
+        posts: {
+          where: { parentPostId: null, deletedAt: null },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            state: true,
+            publishDate: true,
+            error: true,
+            integrationId: true,
+            integration: {
+              select: { name: true, providerIdentifier: true },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  getQueuedItemIds(pipelineId: string) {
+    return this._queueItem.model.pipelineQueueItem.findMany({
+      where: {
+        pipelineId,
+        status: PipelineQueueItemStatus.QUEUED,
+        deletedAt: null,
+      },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
     });
   }
 

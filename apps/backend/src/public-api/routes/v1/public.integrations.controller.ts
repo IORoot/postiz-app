@@ -36,6 +36,8 @@ import { VideoDto } from '@gitroom/nestjs-libraries/dtos/videos/video.dto';
 import { VideoFunctionDto } from '@gitroom/nestjs-libraries/dtos/videos/video.function.dto';
 import { UploadDto } from '@gitroom/nestjs-libraries/dtos/media/upload.dto';
 import { GetMediaDto } from '@gitroom/nestjs-libraries/dtos/media/get.media.dto';
+import { CreateMediaFolderDto } from '@gitroom/nestjs-libraries/dtos/media/create.media.folder.dto';
+import { normalizeIdempotencyKey } from '@gitroom/nestjs-libraries/database/prisma/pipelines/public.pipeline.enqueue';
 import { ClippingDto } from '@gitroom/nestjs-libraries/dtos/clipping/clipping.dto';
 import { ClippingService } from '@gitroom/nestjs-libraries/database/prisma/clipping/clipping.service';
 import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
@@ -81,14 +83,21 @@ export class PublicIntegrationsController {
   @UseInterceptors(FileInterceptor('file', streamUploadOptions()))
   async uploadSimple(
     @GetOrgFromRequest() org: Organization,
-    @UploadedFile('file') file: Express.Multer.File
+    @UploadedFile('file') file: Express.Multer.File,
+    @Body() body: { sha256?: string }
   ) {
     Sentry.metrics.count('public_api-request', 1);
     if (!file) {
       throw new HttpException({ msg: 'No file provided' }, 400);
     }
 
-    return this._mediaService.saveFile(org.id, file.filename, file.path);
+    return this._mediaService.saveFile(
+      org.id,
+      file.filename,
+      file.path,
+      file.originalname,
+      this.contentHash(body?.sha256)
+    );
   }
 
   @Post('/upload-from-url')
@@ -98,7 +107,12 @@ export class PublicIntegrationsController {
   ) {
     Sentry.metrics.count('public_api-request', 1);
     try {
-      return await this._mediaService.uploadFromUrl(org.id, body.url);
+      return await this._mediaService.uploadFromUrl(
+        org.id,
+        body.url,
+        undefined,
+        this.contentHash(body.sha256)
+      );
     } catch (err) {
       // Validation failures keep this route's { msg } error shape
       if (err instanceof BadRequestException) {
@@ -248,6 +262,25 @@ export class PublicIntegrationsController {
     @Query() query: GetMediaDto
   ) {
     Sentry.metrics.count('public_api-request', 1);
+    if (query.sha256) {
+      const contentHash = this.contentHash(query.sha256);
+      if (!contentHash) {
+        throw new HttpException(
+          { msg: 'sha256 must be a SHA-256 hex digest' },
+          400
+        );
+      }
+      const media = await this._mediaService.findNewestReadyMedia(org.id, {
+        contentHash,
+      });
+      return { pages: media ? 1 : 0, results: media ? [media] : [] };
+    }
+    if (query.name) {
+      const media = await this._mediaService.findNewestReadyMedia(org.id, {
+        originalName: query.name,
+      });
+      return { pages: media ? 1 : 0, results: media ? [media] : [] };
+    }
     const { pages, results } = await this._mediaService.getMedia(
       org.id,
       query.page,
@@ -264,6 +297,33 @@ export class PublicIntegrationsController {
         createdAt: p.createdAt,
       })),
     };
+  }
+
+  @Post('/media/folders')
+  async createFolder(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: CreateMediaFolderDto
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    try {
+      return await this._mediaService.createFolderIfMissing(org.id, body);
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        throw new HttpException({ msg: err.message }, 400);
+      }
+      throw err;
+    }
+  }
+
+  private contentHash(value: unknown) {
+    const normalized = normalizeIdempotencyKey(value);
+    if ('error' in normalized) {
+      throw new HttpException(
+        { msg: 'sha256 must be a SHA-256 hex digest' },
+        400
+      );
+    }
+    return normalized.key;
   }
 
   // `user` is only known for OAuth app tokens; an API key belongs to the

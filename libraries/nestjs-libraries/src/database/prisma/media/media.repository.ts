@@ -20,6 +20,7 @@ export class MediaRepository {
     fileName: string,
     filePath: string,
     originalName?: string,
+    contentHash?: string,
   ) {
     return this._media.model.media.create({
       data: {
@@ -31,6 +32,7 @@ export class MediaRepository {
         name: fileName,
         path: filePath,
         originalName: originalName || null,
+        ...(contentHash ? { contentHash } : {}),
         ...(AUDIO_EXT.has(extname(fileName).toLowerCase()) ? { type: 'audio' } : {}),
       },
       select: {
@@ -299,6 +301,41 @@ export class MediaRepository {
       orderBy: {
         name: 'asc',
       },
+    });
+  }
+
+  findNewestReadyMedia(
+    org: string,
+    where: { originalName: string } | { contentHash: string }
+  ) {
+    return this._media.model.media.findFirst({
+      where: {
+        organizationId: org,
+        deletedAt: null,
+        status: 'ready',
+        ...where,
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        name: true,
+        originalName: true,
+        path: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  findFolderByName(org: string, name: string, parentId: string | null) {
+    return this._mediaFolder.model.mediaFolder.findFirst({
+      where: {
+        organizationId: org,
+        name,
+        parentId,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, parentId: true },
     });
   }
 

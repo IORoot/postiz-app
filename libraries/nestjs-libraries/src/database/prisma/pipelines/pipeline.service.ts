@@ -23,6 +23,8 @@ import {
 } from './pipeline.schedule';
 import { PipelineRepository } from './pipeline.repository';
 import { PipelineManager } from './pipeline.manager';
+import { toPublicPipelines } from './public.pipeline.list';
+import { toPublicQueueItem } from './public.queue.read';
 import { socialIntegrationList } from '@gitroom/nestjs-libraries/integrations/integration.manager';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -66,6 +68,92 @@ export class PipelineService {
         projectedEnqueueFor: enqueueSlots[queueCount],
       };
     });
+  }
+
+  async getPublicPipelines(orgId: string) {
+    const pipelines = await this._pipelineRepository.getPipelines(orgId);
+    const now = new Date();
+    return toPublicPipelines(
+      pipelines.map((pipeline) => ({
+        id: pipeline.id,
+        name: pipeline.name,
+        timezone: pipeline.timezone,
+        active: pipeline.active,
+        nextSlot: pipeline.active
+          ? getNextPipelineSlot(
+              pipeline.scheduleSlots,
+              pipeline.timezone,
+              now
+            )
+          : undefined,
+        channels: pipeline.integrations.map((link) => ({
+          id: link.integration.id,
+          name: link.integration.name,
+          identifier: link.integration.providerIdentifier,
+          disabled: link.integration.disabled,
+          deletedAt: link.integration.deletedAt,
+          linkCreatedAt: link.createdAt,
+        })),
+      }))
+    );
+  }
+
+  async getPublicQueueItem(orgId: string, itemId: string) {
+    const item = await this._pipelineRepository.getQueueItemForPublicRead(
+      orgId,
+      itemId
+    );
+    if (!item?.posts.length) {
+      return null;
+    }
+
+    return toPublicQueueItem({
+      id: item.id,
+      group: item.group,
+      status: item.status,
+      error: item.error,
+      projectedFor: await this.projectedQueueSlot(item),
+      posts: item.posts.map((post) => ({
+        id: post.id,
+        state: post.state,
+        publishDate: post.publishDate,
+        error: post.error,
+        integrationId: post.integrationId,
+        integrationName: post.integration.name,
+        identifier: post.integration.providerIdentifier,
+      })),
+    });
+  }
+
+  private async projectedQueueSlot(item: {
+    id: string;
+    status: string;
+    pipelineId: string;
+    pipeline: {
+      active: boolean;
+      timezone: string;
+      scheduleSlots: { dayOfWeek: number; minuteOfDay: number }[];
+    };
+  }) {
+    if (item.status !== 'QUEUED' && item.status !== 'CREATING') {
+      return undefined;
+    }
+    if (!item.pipeline.active) {
+      return undefined;
+    }
+    const queued = await this._pipelineRepository.getQueuedItemIds(
+      item.pipelineId
+    );
+    const index = queued.findIndex((row) => row.id === item.id);
+    if (index < 0) {
+      return undefined;
+    }
+    return getUpcomingPipelineSlots(
+      item.pipeline.scheduleSlots,
+      item.pipeline.timezone,
+      new Date(),
+      queued.length
+    )[index];
   }
 
   async getCalendarPosts(
@@ -516,6 +604,32 @@ export class PipelineService {
     const item = await this._pipelineRepository.deleteItem(orgId, itemId);
     if (!item) throw new NotFoundException('Queued Pipeline item not found');
     return item;
+  }
+
+  async deletePublicQueueItem(orgId: string, itemId: string) {
+    return this.deleteLiveQueueItem(orgId, { id: itemId });
+  }
+
+  async deletePublicQueueItemByGroup(orgId: string, group: string) {
+    return this.deleteLiveQueueItem(orgId, { group });
+  }
+
+  private async deleteLiveQueueItem(
+    orgId: string,
+    where: { id: string } | { group: string }
+  ) {
+    const item = await this._pipelineRepository.getLiveQueueItem(orgId, where);
+    if (!item) {
+      return { outcome: 'missing' as const };
+    }
+    if (item.status !== 'QUEUED' && item.status !== 'FAILED') {
+      return { outcome: 'rejected' as const };
+    }
+    const deleted = await this._pipelineRepository.deleteItem(orgId, item.id);
+    if (!deleted) {
+      return { outcome: 'rejected' as const };
+    }
+    return { outcome: 'deleted' as const, id: item.id };
   }
 
   async publishNow(orgId: string, itemId: string, republish = false) {

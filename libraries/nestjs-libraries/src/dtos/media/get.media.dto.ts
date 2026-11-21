@@ -11,4 +11,12 @@ export class GetMediaDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  sha256?: string;
 }

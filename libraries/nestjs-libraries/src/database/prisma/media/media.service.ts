@@ -189,7 +189,12 @@ export class MediaService {
   // Streams the remote body straight into storage: only the sniffing prefix
   // and a few upload parts are ever in memory, so a 1 GB video does not cost
   // 1 GB of heap
-  async uploadFromUrl(org: string, url: string, adjust?: boolean) {
+  async uploadFromUrl(
+    org: string,
+    url: string,
+    adjust?: boolean,
+    contentHash?: string
+  ) {
     let response: globalThis.Response;
     try {
       response = await fetch(url, {
@@ -222,20 +227,28 @@ export class MediaService {
     );
     return adjust
       ? this.saveUploadedFile(org, uploaded.originalname, uploaded.path)
-      : this.saveFile(org, uploaded.originalname, uploaded.path);
+      : this.saveFile(
+          org,
+          uploaded.originalname,
+          uploaded.path,
+          uploaded.originalname,
+          contentHash
+        );
   }
 
   saveFile(
     org: string,
     fileName: string,
     filePath: string,
-    originalName?: string
+    originalName?: string,
+    contentHash?: string
   ) {
     return this._mediaRepository.saveFile(
       org,
       fileName,
       filePath,
-      originalName
+      originalName,
+      contentHash
     );
   }
 
@@ -607,6 +620,34 @@ export class MediaService {
 
   createFolder(org: string, data: CreateMediaFolderDto) {
     return this._mediaRepository.createFolder(org, data);
+  }
+
+  async createFolderIfMissing(org: string, data: CreateMediaFolderDto) {
+    const name = data.name?.trim();
+    if (!name) {
+      throw new BadRequestException('Folder name is required');
+    }
+    const parentId = data.parentId ?? null;
+    const existing = await this._mediaRepository.findFolderByName(
+      org,
+      name,
+      parentId
+    );
+    if (existing) {
+      return existing;
+    }
+    const created = await this._mediaRepository.createFolder(org, {
+      ...data,
+      name,
+    });
+    return { id: created.id, name: created.name, parentId: created.parentId };
+  }
+
+  findNewestReadyMedia(
+    org: string,
+    where: { originalName: string } | { contentHash: string }
+  ) {
+    return this._mediaRepository.findNewestReadyMedia(org, where);
   }
 
   renameFolder(org: string, id: string, data: RenameMediaFolderDto) {

@@ -234,6 +234,7 @@ model Media {
   thumbnailTimestamp Int?
   status             String              @default("ready")
   processingError    String?
+  contentHash        String?
   organization       Organization        @relation(fields: [organizationId], references: [id])
   folder             MediaFolder?        @relation(fields: [folderId], references: [id])
   agencies           SocialMediaAgency[]
@@ -242,6 +243,7 @@ model Media {
 
   @@index([name])
   @@index([organizationId])
+  @@index([organizationId, contentHash])
   @@index([type])
   @@index([folderId])
 }
@@ -611,7 +613,7 @@ model PipelineQueueItem {
   id             String                  @id @default(uuid())
   pipelineId     String
   group          String                  @unique
-  idempotencyKey String?                 @unique
+  idempotencyKey String?
   position       Int
   status         PipelineQueueItemStatus @default(QUEUED)
   claimedAt      DateTime?
@@ -625,6 +627,7 @@ model PipelineQueueItem {
   posts          Post[]
   slotExecutions PipelineSlotExecution[]
 
+  @@unique([pipelineId, idempotencyKey])
   @@index([pipelineId, status, position])
   @@index([pipelineId, status, position, createdAt, id])
   @@index([claimedAt])
