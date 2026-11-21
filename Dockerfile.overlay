@@ -134,16 +134,6 @@ COPY apps/backend/src/services/auth/auth.middleware.ts \
      /app/apps/backend/src/services/auth/auth.middleware.ts
 COPY apps/backend/src/api/routes/pipelines.controller.ts \
      /app/apps/backend/src/api/routes/pipelines.controller.ts
-COPY apps/backend/src/public-api/public.api.module.ts \
-     /app/apps/backend/src/public-api/public.api.module.ts
-COPY apps/backend/src/public-api/routes/v1/public.pipelines.controller.ts \
-     /app/apps/backend/src/public-api/routes/v1/public.pipelines.controller.ts
-COPY apps/backend/src/public-api/routes/v1/public.integrations.controller.ts \
-     /app/apps/backend/src/public-api/routes/v1/public.integrations.controller.ts
-COPY libraries/nestjs-libraries/src/dtos/media/get.media.dto.ts \
-     /app/libraries/nestjs-libraries/src/dtos/media/get.media.dto.ts
-COPY libraries/nestjs-libraries/src/dtos/media/upload.dto.ts \
-     /app/libraries/nestjs-libraries/src/dtos/media/upload.dto.ts
 COPY apps/orchestrator/src/app.module.ts \
      /app/apps/orchestrator/src/app.module.ts
 COPY apps/orchestrator/src/activities/pipeline.activity.ts \
