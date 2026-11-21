@@ -28,6 +28,7 @@ import utc from 'dayjs/plugin/utc';
 import { AutopostRepository } from '@gitroom/nestjs-libraries/database/prisma/autopost/autopost.repository';
 import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
 import { TemporalService } from 'nestjs-temporal-core';
+import { randomBytes } from 'crypto';
 
 dayjs.extend(utc);
 
@@ -714,6 +715,129 @@ export class IntegrationService {
     );
     const loadOnlyIds = exisingData.map((p) => p.value);
     return difference(id, loadOnlyIds);
+  }
+
+  // The official image calls these before it uses a channel that a workflow
+  // handed over. Tokens here are stored plain, so the channel is returned as it is.
+  async decryptTokens<T extends Partial<Integration>>(integration: T) {
+    return integration;
+  }
+
+  // The official image's encrypt workflow calls this. Nothing is encrypted here,
+  // and an empty page ends that workflow.
+  async encryptStoredTokens(_afterId?: string) {
+    return { changed: 0, failed: 0, lastId: undefined };
+  }
+
+  async createConnectLink(
+    org: string,
+    integration: string,
+    redirectUrl?: string
+  ) {
+    if (
+      !this._integrationManager
+        .getAllowedSocialsIntegrations()
+        .includes(integration) ||
+      this._integrationManager.isHiddenProvider(integration)
+    ) {
+      throw new HttpException('Integration not allowed', HttpStatus.BAD_REQUEST);
+    }
+
+    if (
+      !this._integrationManager
+        .getLinkableSocialsIntegrations()
+        .includes(integration)
+    ) {
+      throw new HttpException(
+        'This integration cannot be connected with a link',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const token = randomBytes(32).toString('hex');
+    await ioRedis.set(
+      `connectLink:${token}`,
+      JSON.stringify({
+        org,
+        integration,
+        redirectUrl,
+        redirectTo: redirectUrl
+          ? this.connectLinkRedirectHost(redirectUrl)
+          : undefined,
+      }),
+      'EX',
+      3600
+    );
+
+    return { url: `${process.env.FRONTEND_URL}/integrations/connect/${token}` };
+  }
+
+  private connectLinkRedirectHost(redirectUrl: string) {
+    try {
+      const { protocol, host } = new URL(redirectUrl);
+      if (['http:', 'https:'].includes(protocol) && !redirectUrl.includes('#')) {
+        return host;
+      }
+    } catch (err) {}
+
+    throw new HttpException(
+      'The redirect URL must be an http(s) URL without a fragment',
+      HttpStatus.BAD_REQUEST
+    );
+  }
+
+  private async loadConnectLink(token: string) {
+    const link = JSON.parse(
+      (await ioRedis.get(`connectLink:${token}`)) || 'null'
+    ) as {
+      org: string;
+      integration: string;
+      redirectUrl?: string;
+      redirectTo?: string;
+    } | null;
+    if (!link) {
+      throw new HttpException(
+        'This connection link expired, please ask for a new one',
+        HttpStatus.NOT_FOUND
+      );
+    }
+    return link;
+  }
+
+  async getConnectLinkOrganization(token: string) {
+    return (await this.loadConnectLink(token)).org;
+  }
+
+  async getConnectLink(token: string) {
+    const { integration, redirectTo } = await this.loadConnectLink(token);
+    const provider = this._integrationManager.getSocialIntegration(integration);
+    return {
+      identifier: provider.identifier,
+      name: provider.name,
+      ...(redirectTo ? { redirectTo } : {}),
+    };
+  }
+
+  async startConnectLink(token: string) {
+    const { org, integration, redirectUrl } = await this.loadConnectLink(token);
+    const provider = this._integrationManager.getSocialIntegration(integration);
+
+    try {
+      const { codeVerifier, state, url } = await provider.generateAuthUrl();
+
+      await ioRedis.set(`organization:${state}`, org, 'EX', 3600);
+      await ioRedis.set(`login:${state}`, codeVerifier, 'EX', 3600);
+      if (redirectUrl) {
+        await ioRedis.set(`redirect:${state}`, redirectUrl, 'EX', 3600);
+      }
+
+      return { url };
+    } catch (err) {
+      throw new HttpException(
+        'Failed to generate auth URL',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
   async findFreeDateTime(
