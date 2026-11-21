@@ -21,7 +21,10 @@ import {
   getPipelineScheduleOccurrencesInRange,
   getUpcomingPipelineSlots,
 } from './pipeline.schedule';
-import { PipelineRepository } from './pipeline.repository';
+import {
+  isActivePipelineIntegration,
+  PipelineRepository,
+} from './pipeline.repository';
 import { PipelineManager } from './pipeline.manager';
 import { socialIntegrationList } from '@gitroom/nestjs-libraries/integrations/integration.manager';
 import dayjs from 'dayjs';
@@ -66,6 +69,26 @@ export class PipelineService {
         projectedEnqueueFor: enqueueSlots[queueCount],
       };
     });
+  }
+
+  async getPublicPipelines(orgId: string) {
+    const pipelines = await this._pipelineRepository.getPipelines(orgId);
+    return pipelines.map((pipeline) => ({
+      id: pipeline.id,
+      name: pipeline.name,
+      channels: pipeline.integrations
+        .filter(({ integration }) => isActivePipelineIntegration(integration))
+        .sort(
+          (first, second) =>
+            first.createdAt.getTime() - second.createdAt.getTime()
+        )
+        .map(({ integration }) => ({
+          id: integration.id,
+          name: integration.name,
+          identifier: integration.providerIdentifier,
+          additionalSettings: integration.additionalSettings || '[]',
+        })),
+    }));
   }
 
   async getCalendarPosts(
