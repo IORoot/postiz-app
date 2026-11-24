@@ -23,3 +23,6 @@ export * from './clipping.workflow';
 export * from './pipeline-workflows/pipeline.scheduler.workflow.v1';
 export * from './pipeline-workflows/pipeline.slot.workflow.v1';
 export * from './pipeline-workflows/pipeline.post.workflow.v1';
+export * from './pipeline-workflows/pipeline.scheduler.workflow.v2';
+export * from './pipeline-workflows/pipeline.slot.workflow.v2';
+export * from './pipeline-workflows/pipeline.post.workflow.v2';

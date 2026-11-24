@@ -34,8 +34,8 @@ describe('InfiniteWorkflowRegister', () => {
       workflowId: 'missing-post-workflow',
       taskQueue: 'main',
     });
-    expect(start).toHaveBeenNthCalledWith(2, 'pipelineSchedulerWorkflowV1', {
-      workflowId: 'pipeline-scheduler-workflow-v1',
+    expect(start).toHaveBeenNthCalledWith(2, 'pipelineSchedulerWorkflowV2', {
+      workflowId: 'pipeline-scheduler-workflow-v2',
       taskQueue: 'main',
     });
     expect(console.info).not.toHaveBeenCalled();
@@ -53,8 +53,8 @@ describe('InfiniteWorkflowRegister', () => {
     expect(start).toHaveBeenCalledTimes(2);
     expect(start).toHaveBeenNthCalledWith(
       2,
-      'pipelineSchedulerWorkflowV1',
-      expect.objectContaining({ workflowId: 'pipeline-scheduler-workflow-v1' })
+      'pipelineSchedulerWorkflowV2',
+      expect.objectContaining({ workflowId: 'pipeline-scheduler-workflow-v2' })
     );
     expect(console.info).toHaveBeenCalledWith(
       'Workflow missing-post-workflow is already running'
@@ -86,8 +86,8 @@ describe('InfiniteWorkflowRegister', () => {
     expect(start).toHaveBeenCalledTimes(2);
     expect(start).toHaveBeenNthCalledWith(
       2,
-      'pipelineSchedulerWorkflowV1',
-      expect.objectContaining({ workflowId: 'pipeline-scheduler-workflow-v1' })
+      'pipelineSchedulerWorkflowV2',
+      expect.objectContaining({ workflowId: 'pipeline-scheduler-workflow-v2' })
     );
     expect(console.error).toHaveBeenCalledWith(
       'Could not start workflow missing-post-workflow:',
@@ -105,7 +105,7 @@ describe('InfiniteWorkflowRegister', () => {
     await expect(makeRegister(start).onModuleInit()).resolves.toBeUndefined();
 
     expect(console.error).toHaveBeenCalledWith(
-      'Could not start workflow pipeline-scheduler-workflow-v1:',
+      'Could not start workflow pipeline-scheduler-workflow-v2:',
       expect.objectContaining({ message: 'temporal unavailable' })
     );
   });

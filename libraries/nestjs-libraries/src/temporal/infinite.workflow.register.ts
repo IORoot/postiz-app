@@ -17,8 +17,8 @@ export class InfiniteWorkflowRegister implements OnModuleInit {
     if (!!process.env.RUN_CRON) {
       await this.startWorkflow('missingPostWorkflow', 'missing-post-workflow');
       await this.startWorkflow(
-        'pipelineSchedulerWorkflowV1',
-        'pipeline-scheduler-workflow-v1'
+        'pipelineSchedulerWorkflowV2',
+        'pipeline-scheduler-workflow-v2'
       );
     }
   }
