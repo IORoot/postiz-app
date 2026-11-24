@@ -19,6 +19,7 @@ import { SettingsController } from '@gitroom/backend/api/routes/settings.control
 import { PostsController } from '@gitroom/backend/api/routes/posts.controller';
 import { PipelinesController } from '@gitroom/backend/api/routes/pipelines.controller';
 import { MediaController } from '@gitroom/backend/api/routes/media.controller';
+import { CleanupController } from '@gitroom/backend/api/routes/cleanup.controller';
 import { ClippingController } from '@gitroom/backend/api/routes/clipping.controller';
 import { MediaWidgetController } from '@gitroom/backend/api/routes/media.widget.controller';
 import { UploadWidgetAuthMiddleware } from '@gitroom/backend/services/auth/upload.widget.auth.middleware';
@@ -68,6 +69,7 @@ const authenticatedController = [
   PostsController,
   PipelinesController,
   MediaController,
+  CleanupController,
   ClippingController,
   BillingController,
   NotificationsController,

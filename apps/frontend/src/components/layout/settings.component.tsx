@@ -34,6 +34,7 @@ import { GlobalSettings } from '@gitroom/frontend/components/settings/global.set
 import { AppsComponent } from '@gitroom/frontend/components/settings/apps.component';
 import { ThirdPartyComponent } from '@gitroom/frontend/components/third-parties/third-party.component';
 import { Plugs } from '@gitroom/frontend/components/plugs/plugs';
+import { CleanupComponent } from '@gitroom/frontend/components/settings/cleanup.component';
 export const SettingsPopup: FC<{
   getRef?: Ref<any>;
 }> = (props) => {
@@ -109,6 +110,9 @@ export const SettingsPopup: FC<{
     arr.push({ tab: 'integrations', label: t('integrations', 'Integrations') });
     arr.push({ tab: 'plugs', label: t('plugs', 'Plugs') });
     arr.push({ tab: 'apps', label: t('apps', 'Apps') });
+    if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
+      arr.push({ tab: 'cleanup', label: t('cleanup', 'Clean up') });
+    }
 
     return arr;
   }, [user, isGeneral, showLogout, t]);
@@ -225,6 +229,13 @@ export const SettingsPopup: FC<{
                 showLogout && (
                   <div>
                     <PublicComponent />
+                  </div>
+                )}
+
+              {tab === 'cleanup' &&
+                (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') && (
+                  <div>
+                    <CleanupComponent />
                   </div>
                 )}
 

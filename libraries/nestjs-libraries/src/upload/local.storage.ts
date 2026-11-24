@@ -1,5 +1,10 @@
-import { IUploadProvider, UploadedStream } from './upload.interface';
+import {
+  IUploadProvider,
+  StoredFile,
+  UploadedStream,
+} from './upload.interface';
 import { createWriteStream, mkdirSync, unlink, writeFileSync } from 'fs';
+import { readdir, stat } from 'fs/promises';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
@@ -135,6 +140,28 @@ export class LocalStorage implements IUploadProvider {
       console.error('Error streaming file to Local Storage:', err);
       throw err;
     }
+  }
+
+  async listFiles(): Promise<StoredFile[]> {
+    const files: StoredFile[] = [];
+    const walk = async (dir: string) => {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const fullPath = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) {
+          await walk(fullPath);
+        } else if (entry.isFile()) {
+          const info = await stat(fullPath);
+          files.push({
+            path: fullPath,
+            relativePath: fullPath.slice(this.uploadDirectory.length),
+            size: info.size,
+            modifiedAt: info.mtime,
+          });
+        }
+      }
+    };
+    await walk(this.uploadDirectory);
+    return files;
   }
 
   // Accepts either the public URL or the filesystem path

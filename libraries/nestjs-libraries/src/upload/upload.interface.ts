@@ -7,6 +7,15 @@ export interface UploadedStream {
   mimetype: string;
 }
 
+export interface StoredFile {
+  // path to hand to `removeFile`
+  path: string;
+  // path below the upload root, like `/2026/10/08/name.mp4`
+  relativePath: string;
+  size: number;
+  modifiedAt: Date;
+}
+
 export interface IUploadProvider {
   uploadSimple(path: string): Promise<string>;
   uploadFile(file: Express.Multer.File): Promise<any>;
@@ -19,6 +28,9 @@ export interface IUploadProvider {
     ext: string
   ): Promise<UploadedStream>;
   removeFile(filePath: string): Promise<void>;
+  // Every stored file, used by the Clean up orphan scan; providers that can't
+  // enumerate their storage leave it out
+  listFiles?(): Promise<StoredFile[]>;
   // Presigned URLs handed to the media processor, which has no storage
   // credentials; only cloud storage can mint them
   signDownloadUrl?(fileName: string): Promise<string>;
