@@ -165,6 +165,22 @@ COPY apps/frontend/src/components/new-launch/select.current.tsx \
      /app/apps/frontend/src/components/new-launch/select.current.tsx
 COPY apps/frontend/src/components/new-launch/store.ts \
      /app/apps/frontend/src/components/new-launch/store.ts
+COPY libraries/nestjs-libraries/src/database/prisma/cleanup/cleanup.repository.ts \
+     /app/libraries/nestjs-libraries/src/database/prisma/cleanup/cleanup.repository.ts
+COPY libraries/nestjs-libraries/src/database/prisma/cleanup/cleanup.service.ts \
+     /app/libraries/nestjs-libraries/src/database/prisma/cleanup/cleanup.service.ts
+COPY libraries/nestjs-libraries/src/dtos/cleanup \
+     /app/libraries/nestjs-libraries/src/dtos/cleanup
+COPY libraries/nestjs-libraries/src/upload/upload.interface.ts \
+     /app/libraries/nestjs-libraries/src/upload/upload.interface.ts
+COPY libraries/nestjs-libraries/src/upload/local.storage.ts \
+     /app/libraries/nestjs-libraries/src/upload/local.storage.ts
+COPY apps/backend/src/api/routes/cleanup.controller.ts \
+     /app/apps/backend/src/api/routes/cleanup.controller.ts
+COPY apps/frontend/src/components/settings/cleanup.component.tsx \
+     /app/apps/frontend/src/components/settings/cleanup.component.tsx
+COPY apps/frontend/src/components/layout/settings.component.tsx \
+     /app/apps/frontend/src/components/layout/settings.component.tsx
 
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 # The folder model is new, so the client in the official image does not know it yet.
