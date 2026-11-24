@@ -43,6 +43,7 @@ import {
   formatPipelineQueueError,
   formatPipelineSlot,
   parseApiError,
+  pipelineExistingData,
   pipelineQueueItemCanCleanup,
   pipelineQueueItemCanSchedule,
   shuffleQueuedOrder,
@@ -70,32 +71,58 @@ const QueuePostPreview: FC<{ item: PipelineQueueItem }> = ({ item }) => {
     ? mediaDir.set(media.thumbnail || media.path)
     : undefined;
   const integration = primary?.integration;
+  // the same channel can repeat, so a channel is told apart by its platform
+  const channels = roots.filter(
+    (post, index) =>
+      roots.findIndex(
+        (other) => other.integration?.id === post.integration?.id
+      ) === index
+  );
+  const platformName = (identifier?: string) =>
+    identifier ? identifier.charAt(0).toUpperCase() + identifier.slice(1) : '';
 
   return (
     <div className="flex flex-col gap-[10px] p-[12px] bg-newBgColor min-h-[220px]">
       <div className="flex gap-[8px] items-start">
-        <div className="relative min-w-[36px] h-[36px] w-[36px]">
-          <img
-            src={integration?.picture || '/no-picture.jpg'}
-            alt={integration?.name || 'channel'}
-            draggable={false}
-            className="rounded-full relative z-[2] w-[36px] h-[36px]"
-          />
-          {integration?.identifier && (
-            <SafeImage
-              src={`/icons/platforms/${integration.identifier}.png`}
-              className="min-w-[16px] min-h-[16px] rounded-full absolute z-10 -bottom-[3px] -end-[3px] border border-newBorder"
-              alt={integration.identifier}
-              width={16}
-              height={16}
-            />
+        <div className="flex">
+          {(channels.length > 1 ? channels.slice(0, 4) : [primary]).map((post, index) => (
+            <div
+              key={post?.id || 'channel'}
+              className={clsx(
+                'relative min-w-[36px] h-[36px] w-[36px]',
+                index > 0 && '-ms-[10px]'
+              )}
+            >
+              <img
+                src={post?.integration?.picture || '/no-picture.jpg'}
+                alt={post?.integration?.name || 'channel'}
+                draggable={false}
+                className="rounded-full relative z-[2] w-[36px] h-[36px]"
+              />
+              {post?.integration?.identifier && (
+                <SafeImage
+                  src={`/icons/platforms/${post.integration.identifier}.png`}
+                  className="min-w-[16px] min-h-[16px] rounded-full absolute z-10 -bottom-[3px] -end-[3px] border border-newBorder"
+                  alt={post.integration.identifier}
+                  width={16}
+                  height={16}
+                />
+              )}
+            </div>
+          ))}
+          {channels.length > 4 && (
+            <div className="-ms-[10px] relative z-[2] w-[36px] h-[36px] rounded-full bg-newBgColorInner border border-newBorder flex items-center justify-center text-[12px]">
+              +{channels.length - 4}
+            </div>
           )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[14px] font-[600] truncate">
-            {integration?.name || 'Untitled post'}
+            {channels.length > 1
+              ? `${channels.length} channels`
+              : integration?.name || 'Untitled post'}
           </div>
-          {integration?.display && (
+          {channels.length <= 1 && integration?.display && (
             <div className="text-[12px] opacity-60 truncate">
               {integration.display}
             </div>
@@ -121,7 +148,7 @@ const QueuePostPreview: FC<{ item: PipelineQueueItem }> = ({ item }) => {
               key={post.id}
               className="text-[11px] border border-newBorder rounded-full px-[6px] py-[1px]"
             >
-              {post.integration.name}
+              {platformName(post.integration?.identifier)} · {post.integration?.name}
             </span>
           ))}
         </div>
@@ -817,26 +844,18 @@ export const PipelineQueue: FC<{
   );
   const edit = useCallback(
     (item: PipelineQueueItem) => {
-      const channels = item.posts
-        .filter((post) => !post.parentPostId)
-        .map((root) => ({
-          integration: root.integration.id,
-          posts: item.posts.filter(
-            (post) => post.integration.id === root.integration.id
-          ),
-          settings: root.settings || {},
-        }));
-      const publishDate = channels[0]?.posts?.[0]?.publishDate;
+      const data = pipelineExistingData(item.group, item.posts);
+      if (!data) {
+        toaster.show(t('post_not_found', 'Post not found'), 'warning');
+        return;
+      }
+      const publishDate = data.posts[0]?.publishDate;
       modal.openModal({
         ...ADD_EDIT_MODAL_OPTIONS,
         children: (
           <ExistingDataContextProvider
             value={{
-              integration: channels[0]?.integration,
-              group: item.group,
-              posts: channels[0]?.posts || [],
-              settings: channels[0]?.settings || {},
-              channels,
+              ...data,
               pipelineId: pipeline.id,
               pipelineQueueItemId: item.id,
               pipelineQueueItemStatus: item.status,
@@ -853,7 +872,7 @@ export const PipelineQueue: FC<{
         ),
       });
     },
-    [modal, pipeline.channels, pipeline.id, refresh]
+    [modal, pipeline.channels, pipeline.id, refresh, t, toaster]
   );
 
   const renderItems = (sectionItems: PipelineQueueItem[]) => (

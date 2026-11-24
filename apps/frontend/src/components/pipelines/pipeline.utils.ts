@@ -558,3 +558,70 @@ export const loadPipelineGlobalSchedule = async (
   }
   return (await response.json()) as PipelineScheduleOccurrence[];
 };
+
+type PipelineGroupPost = {
+  id: string;
+  parentPostId?: string | null;
+  integration?: { id: string; picture?: string | null };
+  settings?: string | Record<string, unknown> | null;
+};
+
+// A pipeline item keeps all its channels as rows of one group, while the
+// editor holds one post per channel. The channel that was opened is the
+// editor's post, the other channels are its siblings. Nothing to open when no
+// row has a channel.
+export const pipelineExistingData = <T extends PipelineGroupPost>(
+  group: string,
+  posts: T[],
+  focusedIntegration?: string
+) => {
+  const byId = new Map(posts.map((post) => [post.id, post]));
+  // a follow-up post has no channel of its own, it belongs to its parent's
+  const channelOf = (post: T, depth = 0): string | undefined =>
+    post.integration?.id ||
+    (post.parentPostId && byId.get(post.parentPostId) && depth < 20
+      ? channelOf(byId.get(post.parentPostId)!, depth + 1)
+      : undefined);
+  const parseSettings = (settings: T['settings']) => {
+    if (typeof settings !== 'string') {
+      return settings || {};
+    }
+    try {
+      return JSON.parse(settings || '{}');
+    } catch (err) {
+      return {};
+    }
+  };
+
+  const roots = posts.filter(
+    (post, index) =>
+      !post.parentPostId &&
+      post.integration?.id &&
+      posts.findIndex(
+        (other) =>
+          !other.parentPostId && other.integration?.id === post.integration?.id
+      ) === index
+  );
+  const channels = roots.map((root) => ({
+    integration: root.integration!.id,
+    integrationPicture: root.integration!.picture,
+    group,
+    posts: posts.filter((post) => channelOf(post) === root.integration!.id),
+    settings: parseSettings(root.settings),
+  }));
+  const current =
+    channels.find((channel) => channel.integration === focusedIntegration) ||
+    channels[0];
+  if (!current) {
+    return undefined;
+  }
+
+  return {
+    group,
+    integration: current.integration,
+    integrationPicture: current.integrationPicture,
+    posts: current.posts,
+    settings: current.settings,
+    siblings: channels.filter((channel) => channel !== current),
+  };
+};

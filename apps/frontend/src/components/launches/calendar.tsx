@@ -61,6 +61,7 @@ import { Button } from '@gitroom/react/form/button';
 import { ChevronUpIcon } from '@gitroom/frontend/components/ui/icons';
 import { Checkbox } from '@gitroom/react/form/checkbox';
 import { BulkActionsBar } from '@gitroom/frontend/components/launches/bulk.actions';
+import { pipelineExistingData } from '@gitroom/frontend/components/pipelines/pipeline.utils';
 
 // Extend dayjs with necessary plugins
 extend(isSameOrAfter);
@@ -185,7 +186,21 @@ const usePostActions = (onMutate?: () => void) => {
         publishDate: loadPost.actualDate || loadPost.publishDate,
       };
 
-      const data = await (await fetch(`/posts/group/${post.group}`)).json();
+      const loaded = await (await fetch(`/posts/group/${post.group}`)).json();
+      // the channels of a pipeline item share one group
+      const pipelineData =
+        !isDuplicate && post.pipelineItemId && loaded?.posts?.length
+          ? pipelineExistingData(loaded.group, loaded.posts, post.integration?.id)
+          : undefined;
+      const data = pipelineData
+        ? {
+            ...pipelineData,
+            pipelineId: post.pipelineId,
+            pipelineQueueItemId: post.pipelineItemId,
+            // the calendar only projects items that are still queued
+            pipelineQueueItemStatus: 'QUEUED',
+          }
+        : loaded;
       if (!data?.posts?.length) {
         toaster.show(t('post_not_found', 'Post not found'), 'warning');
         mutate();
@@ -1531,7 +1546,9 @@ const CalendarItem: FC<{
           )}
         >
           <div className="text-start">
-            {state === 'DRAFT' ? t('draft', 'Draft') + ': ' : ''}
+            {state === 'DRAFT' && !(post as { pipelineItemId?: string }).pipelineItemId
+              ? t('draft', 'Draft') + ': '
+              : ''}
           </div>
             <div className="w-full relative">
               <div className="absolute top-0 start-0 w-full text-ellipsis break-words line-clamp-1 text-start">

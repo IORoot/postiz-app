@@ -274,7 +274,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
 
   const deletePost = useCallback(async () => {
     setLoading(true);
-    if (existingData.siblings?.length) {
+    // the channels of a pipeline item share one group, so they can't be
+    // deleted one by one
+    if (existingData.siblings?.length && !queuedPipeline?.pipelineQueueItemId) {
       const groups = await new Promise<string[]>((resolve) => {
         modal.openModal({
           id: 'delete-post-channels',
