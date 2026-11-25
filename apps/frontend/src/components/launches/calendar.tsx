@@ -187,18 +187,27 @@ const usePostActions = (onMutate?: () => void) => {
       };
 
       const loaded = await (await fetch(`/posts/group/${post.group}`)).json();
-      // the channels of a pipeline item share one group
+      // the channels of a pipeline item share one group, also once the item
+      // was claimed and its posts are listed as ordinary posts, so a group
+      // with several channel roots is split by channel
+      const channelRoots = (loaded?.posts || []).filter(
+        (row: any) => !row.parentPostId
+      ).length;
       const pipelineData =
-        !isDuplicate && post.pipelineItemId && loaded?.posts?.length
+        !isDuplicate && (post.pipelineItemId || channelRoots > 1)
           ? pipelineExistingData(loaded.group, loaded.posts, post.integration?.id)
           : undefined;
       const data = pipelineData
         ? {
             ...pipelineData,
-            pipelineId: post.pipelineId,
-            pipelineQueueItemId: post.pipelineItemId,
-            // the calendar only projects items that are still queued
-            pipelineQueueItemStatus: 'QUEUED',
+            ...(post.pipelineItemId
+              ? {
+                  pipelineId: post.pipelineId,
+                  pipelineQueueItemId: post.pipelineItemId,
+                  // the calendar only projects items that are still queued
+                  pipelineQueueItemStatus: 'QUEUED',
+                }
+              : {}),
           }
         : loaded;
       if (!data?.posts?.length) {
