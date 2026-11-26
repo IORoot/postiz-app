@@ -280,6 +280,48 @@ export class PostsRepository {
     }, [] as any[]);
   }
 
+  // Only what the year overview counts: the date and the pipeline of the post.
+  // Items still queued in a pipeline are projected from their slot instead.
+  getYearOverviewPosts(orgId: string, query: GetPostsDto) {
+    return this._post.model.post.findMany({
+      where: {
+        organizationId: orgId,
+        publishDate: {
+          gte: dayjs.utc(query.startDate).toDate(),
+          lte: dayjs.utc(query.endDate).toDate(),
+        },
+        NOT: {
+          pipelineQueueItem: {
+            is: {
+              status: 'QUEUED' as const,
+              deletedAt: null,
+            },
+          },
+        },
+        integration: {
+          deletedAt: null,
+          organizationId: orgId,
+          ...(query.customer ? { customerId: query.customer } : {}),
+        },
+        deletedAt: null,
+        parentPostId: null,
+      },
+      select: {
+        publishDate: true,
+        pipelineQueueItem: {
+          select: {
+            pipeline: {
+              select: {
+                id: true,
+                color: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
   async getPostsList(orgId: string, query: GetPostsListDto) {
     const page = query.page || 0;
     const limit = query.limit || 20;

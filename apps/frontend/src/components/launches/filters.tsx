@@ -14,7 +14,7 @@ import { FilterIcon } from '@gitroom/frontend/components/ui/icons';
 
 // Helper function to get start and end dates based on display type
 function getDateRange(
-  display: 'day' | 'week' | 'month' | 'list',
+  display: 'day' | 'week' | 'month' | 'list' | 'year',
   referenceDate?: string
 ) {
   const date = referenceDate ? newDayjs(referenceDate) : newDayjs();
@@ -34,6 +34,11 @@ function getDateRange(
       return {
         startDate: date.startOf('month').format('YYYY-MM-DD'),
         endDate: date.endOf('month').format('YYYY-MM-DD'),
+      };
+    case 'year':
+      return {
+        startDate: date.startOf('year').format('YYYY-MM-DD'),
+        endDate: date.endOf('year').format('YYYY-MM-DD'),
       };
     case 'list':
       return {
@@ -64,6 +69,8 @@ export const Filters = () => {
         return `${startDate.format('L')} - ${endDate.format('L')}`;
       case 'month':
         return startDate.format('MMMM YYYY');
+      case 'year':
+        return startDate.format('YYYY');
       default:
         return '';
     }
@@ -72,7 +79,7 @@ export const Filters = () => {
   const setToday = useCallback(() => {
     const today = newDayjs();
     const currentRange = getDateRange(
-      calendar.display as 'day' | 'week' | 'month'
+      calendar.display as 'day' | 'week' | 'month' | 'year'
     );
 
     // Check if we're already showing today's range
@@ -86,7 +93,7 @@ export const Filters = () => {
     calendar.setFilters({
       startDate: currentRange.startDate,
       endDate: currentRange.endDate,
-      display: calendar.display as 'day' | 'week' | 'month',
+      display: calendar.display as 'day' | 'week' | 'month' | 'year',
       customer: calendar.customer,
     });
   }, [calendar]);
@@ -145,6 +152,21 @@ export const Filters = () => {
     });
   }, [calendar]);
 
+  const setYear = useCallback(() => {
+    if (calendar.display === 'year') {
+      return;
+    }
+
+    // the year of the date that is being looked at
+    const range = getDateRange('year', calendar.startDate);
+    calendar.setFilters({
+      startDate: range.startDate,
+      endDate: range.endDate,
+      display: 'year',
+      customer: calendar.customer,
+    });
+  }, [calendar]);
+
   const setList = useCallback(() => {
     if (calendar.display === 'list') {
       return;
@@ -181,7 +203,7 @@ export const Filters = () => {
       calendar.setFilters({
         startDate: calendar.startDate,
         endDate: calendar.endDate,
-        display: calendar.display as 'day' | 'week' | 'month',
+        display: calendar.display as 'day' | 'week' | 'month' | 'year',
         customer: customer,
       });
     },
@@ -202,18 +224,21 @@ export const Filters = () => {
       case 'month':
         nextStart = currentStart.add(1, 'month');
         break;
+      case 'year':
+        nextStart = currentStart.add(1, 'year');
+        break;
       default:
         nextStart = currentStart.add(1, 'week');
     }
 
     const range = getDateRange(
-      calendar.display as 'day' | 'week' | 'month',
+      calendar.display as 'day' | 'week' | 'month' | 'year',
       nextStart.format('YYYY-MM-DD')
     );
     calendar.setFilters({
       startDate: range.startDate,
       endDate: range.endDate,
-      display: calendar.display as 'day' | 'week' | 'month',
+      display: calendar.display as 'day' | 'week' | 'month' | 'year',
       customer: calendar.customer,
     });
   }, [calendar]);
@@ -232,18 +257,21 @@ export const Filters = () => {
       case 'month':
         prevStart = currentStart.subtract(1, 'month');
         break;
+      case 'year':
+        prevStart = currentStart.subtract(1, 'year');
+        break;
       default:
         prevStart = currentStart.subtract(1, 'week');
     }
 
     const range = getDateRange(
-      calendar.display as 'day' | 'week' | 'month',
+      calendar.display as 'day' | 'week' | 'month' | 'year',
       prevStart.format('YYYY-MM-DD')
     );
     calendar.setFilters({
       startDate: range.startDate,
       endDate: range.endDate,
-      display: calendar.display as 'day' | 'week' | 'month',
+      display: calendar.display as 'day' | 'week' | 'month' | 'year',
       customer: calendar.customer,
     });
   }, [calendar]);
@@ -511,6 +539,15 @@ export const Filters = () => {
           onClick={setMonth}
         >
           {t('month', 'Month')}
+        </div>
+        <div
+          className={clsx(
+            'pt-[6px] pb-[5px] cursor-pointer w-[74px] mobile:w-auto mobile:flex-1 mobile:min-w-fit mobile:px-[6px] mobile:whitespace-nowrap text-center rounded-[6px]',
+            calendar.display === 'year' && 'text-textItemFocused bg-boxFocused'
+          )}
+          onClick={setYear}
+        >
+          {t('year', 'Year')}
         </div>
         {/* the list toggle joins the view switcher on phones */}
         <div

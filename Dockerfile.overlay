@@ -181,6 +181,12 @@ COPY apps/frontend/src/components/settings/cleanup.component.tsx \
      /app/apps/frontend/src/components/settings/cleanup.component.tsx
 COPY apps/frontend/src/components/layout/settings.component.tsx \
      /app/apps/frontend/src/components/layout/settings.component.tsx
+COPY apps/frontend/src/components/launches/year.grid.ts \
+     /app/apps/frontend/src/components/launches/year.grid.ts
+COPY apps/frontend/src/components/launches/use.year.overview.ts \
+     /app/apps/frontend/src/components/launches/use.year.overview.ts
+COPY apps/frontend/src/components/launches/year.view.tsx \
+     /app/apps/frontend/src/components/launches/year.view.tsx
 
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 # The folder model is new, so the client in the official image does not know it yet.

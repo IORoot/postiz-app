@@ -58,7 +58,7 @@ export const CalendarContext = createContext({
   setFilters: (filters: {
     startDate: string;
     endDate: string;
-    display: 'week' | 'month' | 'day' | 'list';
+    display: 'week' | 'month' | 'day' | 'list' | 'year';
     customer: string | null;
   }) => {
     /** empty **/
@@ -139,6 +139,11 @@ function getDateRange(display: string, referenceDate?: string) {
       return {
         startDate: date.startOf('month').format('YYYY-MM-DD'),
         endDate: date.endOf('month').format('YYYY-MM-DD'),
+      };
+    case 'year':
+      return {
+        startDate: date.startOf('year').format('YYYY-MM-DD'),
+        endDate: date.endOf('year').format('YYYY-MM-DD'),
       };
     default:
       return {
@@ -278,7 +283,9 @@ export const CalendarWeekProvider: FC<{
     isLoading: calendarIsLoading,
     mutate: mutateCalendar,
   } = useSWR(
-    filters.display !== 'list' ? `/posts-${params}` : null,
+    filters.display !== 'list' && filters.display !== 'year'
+      ? `/posts-${params}`
+      : null,
     loadData,
     {
       refreshInterval: 3600000,
@@ -333,7 +340,7 @@ export const CalendarWeekProvider: FC<{
     (newFilters: {
       startDate: string;
       endDate: string;
-      display: 'week' | 'month' | 'day' | 'list';
+      display: 'week' | 'month' | 'day' | 'list' | 'year';
       customer: string | null;
     }) => {
       setDisplaySaved(newFilters.display);

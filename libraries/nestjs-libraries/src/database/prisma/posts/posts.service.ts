@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PostsRepository } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.repository';
 import { PipelineRepository } from '@gitroom/nestjs-libraries/database/prisma/pipelines/pipeline.repository';
+import { getUpcomingPipelineSlots } from '@gitroom/nestjs-libraries/database/prisma/pipelines/pipeline.schedule';
 import { CreatePostDto } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
 import dayjs from 'dayjs';
 import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
@@ -496,6 +497,67 @@ export class PostsService {
 
   async getPosts(orgId: string, query: GetPostsDto) {
     return this._postRepository.getPosts(orgId, query);
+  }
+
+  // One light row per post for the year view, the client counts them per day.
+  // Queued pipeline items sit on the slot the month view projects them to.
+  async getYearOverview(orgId: string, query: GetPostsDto) {
+    const start = dayjs.utc(query.startDate);
+    const end = dayjs.utc(query.endDate);
+    if (end.diff(start, 'day') > 400) {
+      throw new BadRequestException('The range cannot exceed one year');
+    }
+
+    const [posts, pipelines] = await Promise.all([
+      this._postRepository.getYearOverviewPosts(orgId, query),
+      this._pipelineRepository.getActivePipelinesForCalendar(orgId),
+    ]);
+    const now = new Date();
+
+    const projected = pipelines.flatMap((pipeline) => {
+      const slots = getUpcomingPipelineSlots(
+        pipeline.scheduleSlots,
+        pipeline.timezone,
+        now,
+        pipeline.queueItems.length
+      );
+
+      return pipeline.queueItems.flatMap((item, index) => {
+        const projectedFor = slots[index];
+        if (
+          !projectedFor ||
+          projectedFor.getTime() < start.valueOf() ||
+          projectedFor.getTime() > end.valueOf()
+        ) {
+          return [];
+        }
+
+        return (item.posts || [])
+          .filter(
+            (post) =>
+              !query.customer ||
+              post.integration?.customer?.id === query.customer
+          )
+          .map(() => ({
+            date: projectedFor.toISOString(),
+            pipelineId: pipeline.id as string | null,
+            pipelineColor: pipeline.color as string | null,
+          }));
+      });
+    });
+
+    return [
+      ...posts.map((post) => ({
+        date: post.publishDate.toISOString(),
+        pipelineId: (post.pipelineQueueItem?.pipeline.id ?? null) as
+          | string
+          | null,
+        pipelineColor: (post.pipelineQueueItem?.pipeline.color ?? null) as
+          | string
+          | null,
+      })),
+      ...projected,
+    ];
   }
 
   async getPostsMinified(orgId: string, query: GetPostsDto) {

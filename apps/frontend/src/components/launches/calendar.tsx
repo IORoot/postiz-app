@@ -62,6 +62,7 @@ import { ChevronUpIcon } from '@gitroom/frontend/components/ui/icons';
 import { Checkbox } from '@gitroom/react/form/checkbox';
 import { BulkActionsBar } from '@gitroom/frontend/components/launches/bulk.actions';
 import { pipelineExistingData } from '@gitroom/frontend/components/pipelines/pipeline.utils';
+import { YearView } from '@gitroom/frontend/components/launches/year.view';
 
 // Extend dayjs with necessary plugins
 extend(isSameOrAfter);
@@ -859,6 +860,8 @@ export const Calendar = () => {
         <DayView />
       ) : display === 'week' ? (
         <WeekView />
+      ) : display === 'year' ? (
+        <YearView />
       ) : (
         <MonthView />
       )}

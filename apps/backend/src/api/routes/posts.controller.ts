@@ -144,6 +144,14 @@ export class PostsController {
     return this._postsService.getPostsMinified(org.id, query);
   }
 
+  @Get('/year-overview')
+  async getYearOverview(
+    @GetOrgFromRequest() org: Organization,
+    @Query() query: GetPostsDto
+  ) {
+    return this._postsService.getYearOverview(org.id, query);
+  }
+
   @Get('/find-slot')
   async findSlot(@GetOrgFromRequest() org: Organization) {
     return { date: await this._postsService.findFreeDateTime(org.id) };
