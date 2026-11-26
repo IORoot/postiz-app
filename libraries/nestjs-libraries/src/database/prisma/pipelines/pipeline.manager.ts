@@ -40,7 +40,7 @@ export class PipelineManager {
           idempotencyKey
         );
       if (existing) {
-        return { id: existing.id, group: existing.group };
+        return this.existingQueueItem(orgId, existing);
       }
     }
     const pipelineChannels = pipeline.integrations
@@ -90,7 +90,12 @@ export class PipelineManager {
     );
 
     try {
-      await this._postsService.createPost(orgId, draft, createdBy, true);
+      const created = await this._postsService.createPost(
+        orgId,
+        draft,
+        createdBy,
+        true
+      );
       const queueItem = idempotencyKey
         ? await this._pipelineRepository.publishQueueItem(
             orgId,
@@ -111,7 +116,14 @@ export class PipelineManager {
       if (!queueItem) {
         throw new NotFoundException('Pipeline not found');
       }
-      return { id: queueItem.id, group };
+      return {
+        id: queueItem.id,
+        group,
+        posts: created.map((post) => ({
+          id: post.postId,
+          integration: post.integration,
+        })),
+      };
     } catch (error) {
       await this._pipelineRepository
         .discardUnlinkedDraftPosts(orgId, group)
@@ -124,11 +136,29 @@ export class PipelineManager {
             idempotencyKey
           );
         if (existing) {
-          return { id: existing.id, group: existing.group };
+          return this.existingQueueItem(orgId, existing);
         }
       }
       throw error;
     }
+  }
+
+  private async existingQueueItem(
+    orgId: string,
+    existing: { id: string; group: string }
+  ) {
+    const posts = await this._postsService.getMainPostsByGroup(
+      orgId,
+      existing.group
+    );
+    return {
+      id: existing.id,
+      group: existing.group,
+      posts: posts.map((post) => ({
+        id: post.id,
+        integration: post.integration.id,
+      })),
+    };
   }
 
   schedulePosts(orgId: string, postIds: string[], date: string) {

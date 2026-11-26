@@ -733,6 +733,31 @@ export class PostsService {
     };
   }
 
+  // The main posts (one per channel, no comments) of a group, as the public API
+  // shows them. Deleted posts are already left out by the repository.
+  async getMainPostsByGroup(orgId: string, group: string) {
+    const loadAll = await this._postRepository.getPostsByGroup(orgId, group);
+    return loadAll
+      .filter((post) => !post.parentPostId)
+      .map((post) => {
+        let image = [];
+        try {
+          image = JSON.parse(post.image || '[]');
+        } catch (err) {}
+        return {
+          id: post.id,
+          state: post.state,
+          publishDate: post.publishDate,
+          integration: {
+            id: post.integration.id,
+            providerIdentifier: post.integration.providerIdentifier,
+            name: post.integration.name,
+          },
+          image,
+        };
+      });
+  }
+
   async getPostsByGroup(orgId: string, group: string) {
     const loadAll = await this._postRepository.getPostsByGroup(orgId, group);
     const posts = this.arrangePostsByGroup(loadAll, undefined);

@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   HttpException,
+  NotFoundException,
   Param,
   Post,
   Put,
@@ -226,6 +227,19 @@ export class PublicIntegrationsController {
     Sentry.metrics.count('public_api-request', 1);
     const getPostById = await this._postsService.getPost(org.id, id);
     return this._postsService.deletePost(org.id, getPostById.group);
+  }
+
+  @Get('/posts/group/:group')
+  async getPostsByGroup(
+    @GetOrgFromRequest() org: Organization,
+    @Param('group') group: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    const posts = await this._postsService.getMainPostsByGroup(org.id, group);
+    if (!posts.length) {
+      throw new NotFoundException('Post not found');
+    }
+    return { posts };
   }
 
   @Delete('/posts/group/:group')
