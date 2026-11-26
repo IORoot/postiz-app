@@ -12,6 +12,8 @@ COPY libraries/nestjs-libraries/src/database/prisma/posts/posts.service.ts \
      /app/libraries/nestjs-libraries/src/database/prisma/posts/posts.service.ts
 COPY libraries/nestjs-libraries/src/dtos/posts/bulk.posts.dto.ts \
      /app/libraries/nestjs-libraries/src/dtos/posts/bulk.posts.dto.ts
+COPY libraries/nestjs-libraries/src/dtos/posts/update.post.attachments.dto.ts \
+     /app/libraries/nestjs-libraries/src/dtos/posts/update.post.attachments.dto.ts
 COPY libraries/nestjs-libraries/src/dtos/media/bulk.delete.media.dto.ts \
      /app/libraries/nestjs-libraries/src/dtos/media/bulk.delete.media.dto.ts
 COPY libraries/nestjs-libraries/src/dtos/media/bulk.move.media.dto.ts \
@@ -134,8 +136,14 @@ COPY apps/backend/src/services/auth/auth.middleware.ts \
      /app/apps/backend/src/services/auth/auth.middleware.ts
 COPY apps/backend/src/api/routes/pipelines.controller.ts \
      /app/apps/backend/src/api/routes/pipelines.controller.ts
+COPY libraries/nestjs-libraries/src/integrations/social/instagram.provider.ts \
+     /app/libraries/nestjs-libraries/src/integrations/social/instagram.provider.ts
+COPY libraries/nestjs-libraries/src/integrations/social/instagram.standalone.provider.ts \
+     /app/libraries/nestjs-libraries/src/integrations/social/instagram.standalone.provider.ts
 COPY apps/backend/src/public-api/public.api.module.ts \
      /app/apps/backend/src/public-api/public.api.module.ts
+COPY apps/backend/src/public-api/routes/v1/public.integrations.controller.ts \
+     /app/apps/backend/src/public-api/routes/v1/public.integrations.controller.ts
 COPY apps/backend/src/public-api/routes/v1/public.pipelines.controller.ts \
      /app/apps/backend/src/public-api/routes/v1/public.pipelines.controller.ts
 COPY apps/orchestrator/src/app.module.ts \
